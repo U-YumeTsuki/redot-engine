@@ -30,7 +30,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-package org.redotengine.editor
+package org.godotengine.editor
 
 import android.Manifest
 import android.app.ActivityManager
@@ -55,26 +55,22 @@ import androidx.core.content.edit
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.isVisible
 import androidx.window.layout.WindowMetricsCalculator
-import org.redotengine.editor.embed.EmbeddedGodotGame
-import org.redotengine.editor.embed.GameMenuFragment
-import org.redotengine.editor.utils.signApk
-import org.redotengine.editor.utils.verifyApk
-import org.redotengine.godot.BuildConfig
-import org.redotengine.godot.GodotActivity
-import org.redotengine.godot.GodotLib
-import org.redotengine.godot.editor.utils.EditorUtils
-import org.redotengine.godot.editor.utils.GameMenuUtils
-import org.redotengine.godot.editor.utils.GameMenuUtils.GameEmbedMode
-import org.redotengine.godot.editor.utils.GameMenuUtils.fetchGameEmbedMode
-import org.redotengine.godot.error.Error
-import org.redotengine.godot.utils.DialogUtils
-import org.redotengine.godot.utils.PermissionsUtil
-import org.redotengine.godot.utils.ProcessPhoenix
-import org.redotengine.godot.utils.isNativeXRDevice
-import org.redotengine.godot.xr.HybridMode
-import org.redotengine.godot.xr.getHybridAppLaunchMode
-import org.redotengine.godot.xr.HYBRID_APP_PANEL_CATEGORY
-import org.redotengine.godot.xr.HYBRID_APP_IMMERSIVE_CATEGORY
+import org.godotengine.editor.embed.EmbeddedGodotGame
+import org.godotengine.editor.embed.GameMenuFragment
+import org.godotengine.editor.utils.signApk
+import org.godotengine.editor.utils.verifyApk
+import org.godotengine.godot.BuildConfig
+import org.godotengine.godot.GodotActivity
+import org.godotengine.godot.GodotLib
+import org.godotengine.godot.editor.utils.EditorUtils
+import org.godotengine.godot.editor.utils.GameMenuUtils
+import org.godotengine.godot.editor.utils.GameMenuUtils.GameEmbedMode
+import org.godotengine.godot.editor.utils.GameMenuUtils.fetchGameEmbedMode
+import org.godotengine.godot.error.Error
+import org.godotengine.godot.utils.DialogUtils
+import org.godotengine.godot.utils.PermissionsUtil
+import org.godotengine.godot.utils.ProcessPhoenix
+import org.godotengine.openxr.vendors.utils.*
 import kotlin.math.min
 
 /**
@@ -714,12 +710,8 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
 			return isNativeXRDevice(applicationContext)
 		}
 
-		if (featureTag == "horizonos") {
-			return BuildConfig.FLAVOR == "horizonos"
-		}
-
-		if (featureTag == "picoos") {
-			return BuildConfig.FLAVOR == "picoos"
+		if (featureTag == BuildConfig.FLAVOR) {
+			return true
 		}
 
         return super.supportsFeature(featureTag)

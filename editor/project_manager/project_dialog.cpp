@@ -246,6 +246,35 @@ void ProjectDialog::_validate_path() {
 			}
 		}
 	}
+
+	// Check if the target path is a subdirectory of original when duplicating
+	if (mode == MODE_DUPLICATE) {
+		String base_path = original_project_path;
+		String duplicate_target = target_path;
+
+		// Ensure the paths end with a slash
+		if (!base_path.ends_with("/")) {
+			base_path += "/";
+		}
+
+		if (!duplicate_target.ends_with("/")) {
+			duplicate_target += "/";
+		}
+
+		bool is_subdirectory_or_equal;
+
+		if (d->is_case_sensitive(base_path) || d->is_case_sensitive(duplicate_target)) {
+			is_subdirectory_or_equal = duplicate_target.begins_with(base_path);
+		} else {
+			base_path = base_path.to_lower();
+			String target_lower = duplicate_target.to_lower();
+			is_subdirectory_or_equal = target_lower.begins_with(base_path);
+		}
+
+		if (is_subdirectory_or_equal) {
+			_set_message(TTRC("Cannot duplicate a project into itself."), MESSAGE_ERROR, target_path_input_type);
+		}
+	}
 }
 
 String ProjectDialog::_get_target_path() {
@@ -723,14 +752,14 @@ void ProjectDialog::ok_pressed() {
 		// Load project.godot as ConfigFile to set the new name.
 		ConfigFile cfg;
 		String project_godot = path.path_join("project.godot");
-		Error err = cfg.load(project_godot);
+		Error err = cfg.load(project_godot, true);
 		if (err != OK) {
 			dialog_error->set_text(vformat(TTR("Couldn't load project at '%s' (error %d). It may be missing or corrupted."), project_godot, err));
 			dialog_error->popup_centered();
 			return;
 		}
 		cfg.set_value("application", "config/name", project_name->get_text().strip_edges());
-		err = cfg.save(project_godot);
+		err = cfg.save(project_godot, true);
 		if (err != OK) {
 			dialog_error->set_text(vformat(TTR("Couldn't save project at '%s' (error %d)."), project_godot, err));
 			dialog_error->popup_centered();

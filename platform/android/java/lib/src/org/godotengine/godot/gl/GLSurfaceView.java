@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.redotengine.godot.gl;
+package org.godotengine.godot.gl;
 
 import android.content.Context;
 import android.opengl.EGL14;
@@ -603,6 +603,18 @@ public class GLSurfaceView extends SurfaceView implements SurfaceHolder.Callback
 		if (mGLThread != null) {
 			mGLThread.requestExitAndWait();
 		}
+	}
+
+	/**
+	 * Requests the render thread to exit and block up to the given timeInMs until it's done.
+	 *
+	 * @return true if the thread exited, false otherwise.
+	 */
+	protected final boolean requestRenderThreadExitAndWait(long timeInMs) {
+		if (mGLThread != null) {
+			return mGLThread.requestExitAndWait(timeInMs);
+		}
+		return false;
 	}
 	// -- GODOT end --
 
@@ -1793,6 +1805,23 @@ public class GLSurfaceView extends SurfaceView implements SurfaceHolder.Callback
 						Thread.currentThread().interrupt();
 					}
 				}
+			}
+		}
+
+		public boolean requestExitAndWait(long timeInMs) {
+			// Don't call this from GLThread thread or it is a guaranteed deadlock!
+			synchronized(sGLThreadManager) {
+				mShouldExit = true;
+				sGLThreadManager.notifyAll();
+				if (!mExited) {
+					try {
+						sGLThreadManager.wait(timeInMs);
+					} catch (InterruptedException ex) {
+						Thread.currentThread().interrupt();
+					}
+				}
+
+				return mExited;
 			}
 		}
 

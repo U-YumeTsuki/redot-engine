@@ -30,7 +30,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-package org.redotengine.godot
+package org.godotengine.godot
 
 import android.app.Activity
 import android.content.ComponentName
@@ -41,9 +41,9 @@ import android.util.Log
 import androidx.annotation.CallSuper
 import androidx.annotation.LayoutRes
 import androidx.fragment.app.FragmentActivity
-import org.redotengine.godot.utils.CommandLineFileParser
-import org.redotengine.godot.utils.PermissionsUtil
-import org.redotengine.godot.utils.ProcessPhoenix
+import org.godotengine.godot.utils.CommandLineFileParser
+import org.godotengine.godot.utils.PermissionsUtil
+import org.godotengine.godot.utils.ProcessPhoenix
 
 /**
  * Base abstract activity for Android apps intending to use Godot as the primary screen.
@@ -100,7 +100,16 @@ abstract class GodotActivity : FragmentActivity(), GodotHost {
 		} else {
 			Log.v(TAG, "Creating new Redot fragment instance.")
 			godotFragment = initGodotInstance()
-			supportFragmentManager.beginTransaction().replace(R.id.godot_fragment_container, godotFragment!!).setPrimaryNavigationFragment(godotFragment).commitNowAllowingStateLoss()
+
+			val transaction = supportFragmentManager.beginTransaction()
+			if (currentFragment != null) {
+				Log.v(TAG, "Removing existing fragment before replacement.")
+				transaction.remove(currentFragment)
+			}
+
+			transaction.replace(R.id.godot_fragment_container, godotFragment!!)
+				.setPrimaryNavigationFragment(godotFragment)
+				.commitNowAllowingStateLoss()
 		}
 	}
 

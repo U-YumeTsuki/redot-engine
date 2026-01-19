@@ -31,7 +31,7 @@
 /**************************************************************************/
 
 @file:JvmName("VkSurfaceView")
-package org.redotengine.godot.vulkan
+package org.godotengine.godot.vulkan
 
 import android.content.Context
 import android.view.SurfaceHolder
@@ -119,6 +119,15 @@ open internal class VkSurfaceView(context: Context) : SurfaceView(context), Surf
 	 */
 	fun requestRenderThreadExitAndWait() {
 		vkThread.requestExitAndWait()
+	}
+
+	/**
+	 * Requests the render thread to exit and block up to the given [timeInMs] until it's done.
+	 *
+	 * @return true if the thread exited, false otherwise.
+	 */
+	fun requestRenderThreadExitAndWait(timeInMs: Long): Boolean {
+		return vkThread.requestExitAndWait(timeInMs)
 	}
 
 	override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {

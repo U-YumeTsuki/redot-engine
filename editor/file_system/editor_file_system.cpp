@@ -615,7 +615,7 @@ bool EditorFileSystem::_test_for_reimport(const String &p_path, const String &p_
 		next_tag.fields.clear();
 		next_tag.name = String();
 
-		err = VariantParser::parse_tag_assign_eof(&stream, lines, error_text, next_tag, assign, value, nullptr, true);
+		err = VariantParser::parse_tag_assign_eof(&stream, lines, error_text, next_tag, assign, value, nullptr, true, true);
 		if (err == ERR_FILE_EOF) {
 			break;
 		} else if (err != OK) {
@@ -700,7 +700,7 @@ bool EditorFileSystem::_test_for_reimport(const String &p_path, const String &p_
 		next_tag.fields.clear();
 		next_tag.name = String();
 
-		err = VariantParser::parse_tag_assign_eof(&md5_stream, lines, error_text, next_tag, assign, value, nullptr, true);
+		err = VariantParser::parse_tag_assign_eof(&md5_stream, lines, error_text, next_tag, assign, value, nullptr, true, true);
 
 		if (err == ERR_FILE_EOF) {
 			break;
@@ -2587,7 +2587,7 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 	for (int i = 0; i < p_files.size(); i++) {
 		Ref<ConfigFile> config;
 		config.instantiate();
-		Error err = config->load(p_files[i] + ".import");
+		Error err = config->load(p_files[i] + ".import", true);
 		ERR_CONTINUE(err != OK);
 		ERR_CONTINUE(!config->has_section_key("remap", "importer"));
 		String file_importer_name = config->get_value("remap", "importer");
@@ -2713,7 +2713,7 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 					v = source_file_options[file][base];
 				}
 				String value;
-				VariantWriter::write_to_string(v, value);
+				VariantWriter::write_to_string(v, value, nullptr, nullptr, true, true);
 				f->store_line(base + "=" + value);
 			}
 		}
@@ -2796,6 +2796,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 
 	ResourceUID::ID uid = ResourceUID::INVALID_ID;
 	Variant generator_parameters;
+	String group_file;
 	if (p_generator_parameters) {
 		generator_parameters = *p_generator_parameters;
 	}
@@ -2804,7 +2805,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		//use existing
 		Ref<ConfigFile> cf;
 		cf.instantiate();
-		Error err = cf->load(p_file + ".import");
+		Error err = cf->load(p_file + ".import", true);
 		if (err == OK) {
 			if (cf->has_section("params")) {
 				Vector<String> sk = cf->get_section_keys("params");
@@ -2823,6 +2824,10 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 				if (cf->has_section_key("remap", "uid")) {
 					String uidt = cf->get_value("remap", "uid");
 					uid = ResourceUID::get_singleton()->text_to_id(uidt);
+				}
+
+				if (cf->has_section_key("remap", "group_file")) {
+					group_file = cf->get_value("remap", "group_file");
 				}
 
 				if (!p_generator_parameters) {
@@ -2920,6 +2925,9 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		}
 
 		f->store_line("uid=\"" + ResourceUID::get_singleton()->id_to_text(uid) + "\""); // Store in readable format.
+		if (!group_file.is_empty()) {
+			f->store_line("group_file=\"" + group_file + "\"");
+		}
 
 		if (err == OK) {
 			if (importer->get_save_extension().is_empty()) {
@@ -2962,7 +2970,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 			}
 
 			String value;
-			VariantWriter::write_to_string(genf, value);
+			VariantWriter::write_to_string(genf, value, nullptr, nullptr, true, true);
 			f->store_line("files=" + value);
 			f->store_line("");
 		}
@@ -2986,7 +2994,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		for (const ResourceImporter::ImportOption &E : opts) {
 			String base = E.option.name;
 			String value;
-			VariantWriter::write_to_string(params[base], value);
+			VariantWriter::write_to_string(params[base], value, nullptr, nullptr, true, true);
 			f->store_line(base + "=" + value);
 		}
 	}
@@ -3088,7 +3096,7 @@ Error EditorFileSystem::_copy_file(const String &p_from, const String &p_to) {
 		}
 
 		// Roll a new uid for this copied .import file to avoid conflict.
-		ResourceUID::ID res_uid = ResourceUID::get_singleton()->create_id();
+		ResourceUID::ID res_uid = ResourceUID::get_singleton()->create_id_for_path(p_to);
 
 		// Save the new .import file
 		Ref<ConfigFile> cfg;
@@ -3273,7 +3281,12 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 	// Emit the resource_reimporting signal for the single file before the actual importation.
 	emit_signal(SNAME("resources_reimporting"), reloads);
 
-#ifdef THREADS_ENABLED
+#ifdef WEB_ENABLED
+	// On web, busy-wait loops on the main thread block the JavaScript event loop,
+	// causing the browser tab to appear frozen. Disable threaded imports entirely.
+	// See GH-112072 for details.
+	bool use_multiple_threads = false;
+#elif defined(THREADS_ENABLED)
 	bool use_multiple_threads = GLOBAL_GET("editor/import/use_multiple_threads");
 #else
 	bool use_multiple_threads = false;
@@ -3444,7 +3457,7 @@ bool EditorFileSystem::_should_skip_directory(const String &p_path) {
 
 	if (FileAccess::exists(p_path.path_join("project.godot"))) {
 		// Skip if another project inside this.
-		if (EditorFileSystem::get_singleton()->first_scan) {
+		if (EditorFileSystem::get_singleton() == nullptr || EditorFileSystem::get_singleton()->first_scan) {
 			WARN_PRINT_ONCE(vformat("Detected another project.godot at %s. The folder will be ignored.", p_path));
 		}
 		return true;
@@ -3472,7 +3485,7 @@ void EditorFileSystem::_move_group_files(EditorFileSystemDirectory *efd, const S
 			Ref<ConfigFile> config;
 			config.instantiate();
 			String path = efd->get_file_path(i) + ".import";
-			Error err = config->load(path);
+			Error err = config->load(path, true);
 			if (err != OK) {
 				continue;
 			}
@@ -3489,7 +3502,7 @@ void EditorFileSystem::_move_group_files(EditorFileSystemDirectory *efd, const S
 				}
 			}
 
-			config->save(path);
+			config->save(path, true);
 		}
 	}
 
@@ -3742,7 +3755,9 @@ void EditorFileSystem::remove_import_format_support_query(Ref<EditorFileSystemIm
 }
 
 EditorFileSystem::EditorFileSystem() {
-#ifdef THREADS_ENABLED
+#if defined(THREADS_ENABLED) && !defined(WEB_ENABLED)
+	// On web, threaded scanning blocks the browser's event loop, causing freezes.
+	// See GH-112072 for details.
 	use_threads = true;
 #endif
 

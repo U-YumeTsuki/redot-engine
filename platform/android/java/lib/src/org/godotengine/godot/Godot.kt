@@ -30,7 +30,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-package org.redotengine.godot
+package org.godotengine.godot
 
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -58,26 +58,26 @@ import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.vending.expansion.downloader.*
-import org.redotengine.godot.error.Error
-import org.redotengine.godot.input.GodotEditText
-import org.redotengine.godot.input.GodotInputHandler
-import org.redotengine.godot.io.FilePicker
-import org.redotengine.godot.io.directory.DirectoryAccessHandler
-import org.redotengine.godot.io.file.FileAccessHandler
-import org.redotengine.godot.plugin.AndroidRuntimePlugin
-import org.redotengine.godot.plugin.GodotPlugin
-import org.redotengine.godot.plugin.GodotPluginRegistry
-import org.redotengine.godot.tts.GodotTTS
-import org.redotengine.godot.utils.DialogUtils
-import org.redotengine.godot.utils.GodotNetUtils
-import org.redotengine.godot.utils.PermissionsUtil
-import org.redotengine.godot.utils.PermissionsUtil.requestPermission
-import org.redotengine.godot.utils.beginBenchmarkMeasure
-import org.redotengine.godot.utils.benchmarkFile
-import org.redotengine.godot.utils.dumpBenchmark
-import org.redotengine.godot.utils.endBenchmarkMeasure
-import org.redotengine.godot.utils.useBenchmark
-import org.redotengine.godot.xr.XRMode
+import org.godotengine.godot.error.Error
+import org.godotengine.godot.input.GodotEditText
+import org.godotengine.godot.input.GodotInputHandler
+import org.godotengine.godot.io.FilePicker
+import org.godotengine.godot.io.directory.DirectoryAccessHandler
+import org.godotengine.godot.io.file.FileAccessHandler
+import org.godotengine.godot.plugin.AndroidRuntimePlugin
+import org.godotengine.godot.plugin.GodotPlugin
+import org.godotengine.godot.plugin.GodotPluginRegistry
+import org.godotengine.godot.tts.GodotTTS
+import org.godotengine.godot.utils.DialogUtils
+import org.godotengine.godot.utils.GodotNetUtils
+import org.godotengine.godot.utils.PermissionsUtil
+import org.godotengine.godot.utils.PermissionsUtil.requestPermission
+import org.godotengine.godot.utils.beginBenchmarkMeasure
+import org.godotengine.godot.utils.benchmarkFile
+import org.godotengine.godot.utils.dumpBenchmark
+import org.godotengine.godot.utils.endBenchmarkMeasure
+import org.godotengine.godot.utils.useBenchmark
+import org.godotengine.godot.xr.XRMode
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -108,6 +108,8 @@ class Godot private constructor(val context: Context) {
 				INSTANCE ?: Godot(context.applicationContext).also { INSTANCE = it }
 			}
 		}
+
+		private const val EXIT_RENDERER_TIMEOUT_IN_MS = 1500L
 
 		// Supported build flavors
 		private const val EDITOR_FLAVOR = "editor"
@@ -392,7 +394,7 @@ class Godot private constructor(val context: Context) {
 			}
 		} else {
 			if (rootView.rootWindowInsets != null) {
-				if (!useImmersive.get() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
+				if (!useImmersive.get()) {
 					val windowInsets = WindowInsetsCompat.toWindowInsetsCompat(rootView.rootWindowInsets)
 					val insets = windowInsets.getInsets(getInsetType())
 					rootView.setPadding(insets.left, insets.top, insets.right, insets.bottom)
@@ -401,8 +403,7 @@ class Godot private constructor(val context: Context) {
 
 			ViewCompat.setOnApplyWindowInsetsListener(rootView) { v: View, insets: WindowInsetsCompat ->
 				v.post {
-					if (useImmersive.get() && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-						// Fixes issue where padding remained visible in immersive mode on some devices.
+					if (useImmersive.get()) {
 						v.setPadding(0, 0, 0, 0)
 					} else {
 						val windowInsets = insets.getInsets(getInsetType())
@@ -624,8 +625,8 @@ class Godot private constructor(val context: Context) {
 				}
 
 				override fun onEnd(animation: WindowInsetsAnimationCompat) {
-					// Fixes issue on Android 7 and 8 where immersive mode gets auto disabled after the keyboard is hidden.
-					if (useImmersive.get() && Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+					// Fixes an issue on Android 10 and older where immersive mode gets auto disabled after the keyboard is hidden on some devices.
+					if (useImmersive.get() && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
 						runOnHostThread {
 							enableImmersiveMode(true, true)
 						}
@@ -738,7 +739,12 @@ class Godot private constructor(val context: Context) {
 			plugin.onMainDestroy()
 		}
 
-		renderView?.onActivityDestroyed()
+		if (renderView?.blockingExitRenderer(EXIT_RENDERER_TIMEOUT_IN_MS) != true) {
+			Log.w(TAG, "Unable to exit the renderer within $EXIT_RENDERER_TIMEOUT_IN_MS ms... Force quitting the process.")
+			onGodotTerminating()
+			forceQuit(0)
+		}
+
 		this.primaryHost = null
 	}
 
@@ -751,7 +757,9 @@ class Godot private constructor(val context: Context) {
 		val newDarkMode = newConfig.uiMode.and(Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 		if (darkMode != newDarkMode) {
 			darkMode = newDarkMode
-			GodotLib.onNightModeChanged()
+			runOnRenderThread {
+				GodotLib.onNightModeChanged()
+			}
 		}
 	}
 
@@ -763,7 +771,9 @@ class Godot private constructor(val context: Context) {
 			plugin.onMainActivityResult(requestCode, resultCode, data)
 		}
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-			FilePicker.handleActivityResult(context, requestCode, resultCode, data)
+			runOnRenderThread {
+				FilePicker.handleActivityResult(context, requestCode, resultCode, data)
+			}
 		}
 	}
 
@@ -778,11 +788,13 @@ class Godot private constructor(val context: Context) {
 		for (plugin in pluginRegistry.allPlugins) {
 			plugin.onMainRequestPermissionsResult(requestCode, permissions, grantResults)
 		}
-		for (i in permissions.indices) {
-			GodotLib.requestPermissionResult(
-				permissions[i],
-				grantResults[i] == PackageManager.PERMISSION_GRANTED
-			)
+		runOnRenderThread {
+			for (i in permissions.indices) {
+				GodotLib.requestPermissionResult(
+					permissions[i],
+					grantResults[i] == PackageManager.PERMISSION_GRANTED
+				)
+			}
 		}
 	}
 
@@ -1091,7 +1103,7 @@ class Godot private constructor(val context: Context) {
 		for (plugin in pluginRegistry.allPlugins) {
 			plugin.onMainBackPressed()
 		}
-		renderView?.queueOnRenderThread { GodotLib.back() }
+		runOnRenderThread { GodotLib.back() }
 	}
 
 	/**

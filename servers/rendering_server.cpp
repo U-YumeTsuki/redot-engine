@@ -1255,6 +1255,13 @@ Error RenderingServer::mesh_create_surface_data_from_arrays(SurfaceData *r_surfa
 		// Include custom array format type.
 		if (format & (1ULL << (ARRAY_CUSTOM0 + i))) {
 			format |= (RS::ARRAY_FORMAT_CUSTOM_MASK << (RS::ARRAY_FORMAT_CUSTOM_BASE + i * RS::ARRAY_FORMAT_CUSTOM_BITS)) & p_compress_format;
+
+			// If the mesh contains no vertex array, infer the array length from the custom array.
+			if (array_len == 0) {
+				Vector<Variant> custom_array = p_arrays[RS::ARRAY_CUSTOM0 + i];
+				uint32_t factor_reciprocal = _get_vertex_to_custom_array_length_factor(format, RS::ARRAY_CUSTOM0 + i);
+				array_len = custom_array.size() / factor_reciprocal;
+			}
 		}
 	}
 
@@ -1387,6 +1394,31 @@ Error RenderingServer::mesh_create_surface_data_from_arrays(SurfaceData *r_surfa
 	surface_data.uv_scale = uv_scale;
 
 	return OK;
+}
+
+int32_t RenderingServer::_get_vertex_to_custom_array_length_factor(uint32_t p_format, int p_array_index) {
+	uint32_t type = (p_format >> (ARRAY_FORMAT_CUSTOM_BASE + ARRAY_FORMAT_CUSTOM_BITS * (p_array_index - RS::ARRAY_CUSTOM0))) & ARRAY_FORMAT_CUSTOM_MASK;
+	switch (type) {
+		case ARRAY_CUSTOM_RGBA8_UNORM:
+		case ARRAY_CUSTOM_RGBA8_SNORM:
+		case ARRAY_CUSTOM_RG_HALF: {
+			return 4;
+		} break;
+		case ARRAY_CUSTOM_RGBA_HALF: {
+			return 8;
+		} break;
+		case ARRAY_CUSTOM_R_FLOAT:
+		case ARRAY_CUSTOM_RG_FLOAT:
+		case ARRAY_CUSTOM_RGB_FLOAT:
+		case ARRAY_CUSTOM_RGBA_FLOAT: {
+			int32_t s = type - ARRAY_CUSTOM_R_FLOAT + 1;
+
+			return s;
+		} break;
+		default: {
+			ERR_FAIL_V_MSG(0, "Invalid custom format type.");
+		}
+	}
 }
 
 void RenderingServer::mesh_add_surface_from_arrays(RID p_mesh, PrimitiveType p_primitive, const Array &p_arrays, const Array &p_blend_shapes, const Dictionary &p_lods, BitField<ArrayFormat> p_compress_format) {
@@ -2036,7 +2068,7 @@ Dictionary RenderingServer::_mesh_get_surface(RID p_mesh, int p_idx) {
 			Dictionary ld;
 			ld["edge_length"] = sd.lods[i].edge_length;
 			ld["index_data"] = sd.lods[i].index_data;
-			lods.push_back(lods);
+			lods.push_back(ld);
 		}
 		d["lods"] = lods;
 	}
@@ -3650,9 +3682,9 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/reflections/sky_reflections/ggx_samples", PROPERTY_HINT_RANGE, "0,256,1"), 32);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/sky_reflections/ggx_samples.mobile", PROPERTY_HINT_RANGE, "0,128,1"), 16);
 	GLOBAL_DEF("rendering/reflections/sky_reflections/fast_filter_high_quality", false);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_size", PROPERTY_HINT_RANGE, "0,4096,1"), 256);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_size.mobile", PROPERTY_HINT_RANGE, "0,2048,1"), 128);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_count", PROPERTY_HINT_RANGE, "0,256,1"), 64);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_size", PROPERTY_HINT_RANGE, "4,4096,1"), 256);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_size.mobile", PROPERTY_HINT_RANGE, "4,2048,1"), 128);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_count", PROPERTY_HINT_RANGE, "1,256,1"), 64);
 	GLOBAL_DEF_RST("rendering/reflections/specular_occlusion/enabled", true);
 
 	GLOBAL_DEF("rendering/global_illumination/gi/use_half_resolution", false);

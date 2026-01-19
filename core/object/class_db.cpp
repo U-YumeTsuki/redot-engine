@@ -369,6 +369,17 @@ ClassDB::APIType ClassDB::get_api_type(const StringName &p_class) {
 	return ti->api;
 }
 
+Error ClassDB::override_api_type(const StringName &p_class, ClassDB::APIType p_api) {
+	Locker::Lock lock(Locker::STATE_WRITE);
+
+	ClassInfo *ti = classes.getptr(p_class);
+
+	ERR_FAIL_NULL_V_MSG(ti, Error::ERR_DOES_NOT_EXIST, vformat("Cannot get class '%s'.", String(p_class)));
+	ti->api = p_api;
+
+	return Error::OK;
+}
+
 uint32_t ClassDB::get_api_hash(APIType p_api) {
 #ifdef DEBUG_ENABLED
 	Locker::Lock lock(Locker::STATE_WRITE);
@@ -547,6 +558,12 @@ Object *ClassDB::_instantiate_internal(const StringName &p_class, bool p_require
 		}
 		ERR_FAIL_NULL_V_MSG(ti, nullptr, vformat("Cannot get class '%s'.", String(p_class)));
 		ERR_FAIL_COND_V_MSG(ti->disabled, nullptr, vformat("Class '%s' is disabled.", String(p_class)));
+#ifndef DISABLE_DEPRECATED
+		// Force legacy unexposed classes to skip the exposed check to preserve backcompat.
+		if (ti->gdextension && ti->gdextension->legacy_unexposed_class) {
+			p_exposed_only = false;
+		}
+#endif // DISABLE_DEPRECATED
 		if (p_exposed_only) {
 			ERR_FAIL_COND_V_MSG(!ti->exposed, nullptr, vformat("Class '%s' isn't exposed.", String(p_class)));
 		}
@@ -605,6 +622,13 @@ bool ClassDB::_can_instantiate(ClassInfo *p_class_info, bool p_exposed_only) {
 	if (!p_class_info) {
 		return false;
 	}
+
+#ifndef DISABLE_DEPRECATED
+	// Force legacy unexposed classes to skip the exposed check to preserve backcompat.
+	if (p_class_info->gdextension && p_class_info->gdextension->legacy_unexposed_class) {
+		p_exposed_only = false;
+	}
+#endif // DISABLE_DEPRECATED
 
 	if (p_exposed_only && !p_class_info->exposed) {
 		return false;
