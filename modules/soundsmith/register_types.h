@@ -32,7 +32,13 @@
 
 #pragma once
 
+/**
+ * @file register_types.h
+ *
+ * [Add any documentation that applies to the entire file here!]
+ */
+
 #include "modules/register_module_types.h"
 
-void initialize_signalsmith_module(ModuleInitializationLevel p_level);
-void uninitialize_signalsmith_module(ModuleInitializationLevel p_level);
+void initialize_soundsmith_module(ModuleInitializationLevel p_level);
+void uninitialize_soundsmith_module(ModuleInitializationLevel p_level);

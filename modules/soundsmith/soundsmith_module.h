@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  signalsmith_module.h                                                  */
+/*  soundsmith_module.h                                                   */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             REDOT ENGINE                               */
@@ -32,13 +32,20 @@
 
 #pragma once
 
+/**
+ * @file signalsmith_module.h
+ *
+ * [Add any documentation that applies to the entire file here!]
+ */
+
 #include "core/object/class_db.h"
 #include "core/object/ref_counted.h"
+#include "scene/resources/audio_stream_wav.h"
 #include "signalsmith-stretch/signalsmith-stretch.h"
 #include <random>
 
-class SignalSmith : public RefCounted {
-	GDCLASS(SignalSmith, RefCounted);
+class SoundSmith : public RefCounted {
+	GDCLASS(SoundSmith, RefCounted);
 
 private:
 	signalsmith::stretch::SignalsmithStretch<float, std::mt19937> stretch;
@@ -50,8 +57,8 @@ protected:
 	static void _bind_methods();
 
 public:
-	SignalSmith();
-	~SignalSmith();
+	SoundSmith();
+	~SoundSmith();
 
 	void set_sample_rate(int p_rate);
 	void set_channels(int p_channels);
@@ -59,5 +66,10 @@ public:
 	void set_tempo(float p_tempo);
 	void reset();
 
+	int get_last_sample_rate() const;
+	int get_last_channels() const;
+
 	PackedFloat32Array process(const PackedFloat32Array &input);
+
+	Ref<AudioStreamWAV> change_tempo(const String &path, float p_tempo, float p_pitch = 1.0f);
 };
