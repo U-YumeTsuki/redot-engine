@@ -63,13 +63,18 @@
 #include <sys/sysctl.h>
 #endif
 
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <kvm.h>
 #endif
 
 #if defined(__OpenBSD__)
 #include <sys/swap.h>
+#include <sys/types.h>
 #include <uvm/uvmexp.h>
+#include <climits>
+#include <sstream>
+#include <string>
+#include <vector>
 #endif
 
 #if defined(__NetBSD__)
@@ -1146,11 +1151,133 @@ String OS_Unix::get_executable_path() const {
 	}
 	return b;
 #elif defined(__OpenBSD__)
+	std::string path;
+	auto cpp_getexe = [](std::string exe) {
+		int cntp = 0;
+		std::string res;
+		kvm_t *kd = nullptr;
+		kinfo_file *kif = nullptr;
+		bool error = false;
+		kd = kvm_openfiles(nullptr, nullptr, nullptr, KVM_NO_FILES, nullptr);
+		if (kd) {
+			if ((kif = kvm_getfiles(kd, KERN_FILE_BYPID, getpid(), sizeof(struct kinfo_file), &cntp))) {
+				for (int i = 0; i < cntp && kif[i].fd_fd < 0; i++) {
+					if (kif[i].fd_fd == KERN_FILE_TEXT) {
+					fallback:
+						struct stat st;
+						char buffer[PATH_MAX];
+						if (!stat(exe.c_str(), &st) && (st.st_mode & S_IXUSR) &&
+								S_ISREG(st.st_mode) && realpath(exe.c_str(), buffer) &&
+								st.st_dev == (dev_t)kif[i].va_fsid && st.st_ino == (ino_t)kif[i].va_fileid) {
+							res = buffer;
+						}
+						if (res.empty() && !error) {
+							error = true;
+							std::size_t last_slash_pos = exe.find_last_of("/");
+							if (last_slash_pos != std::string::npos) {
+								exe = exe.substr(0, last_slash_pos + 1) + kif[i].p_comm;
+								goto fallback;
+							}
+						}
+						break;
+					}
+				}
+			}
+			kvm_close(kd);
+		}
+		return res;
+	};
+	auto cpp_getenv = [](std::string name) {
+		const char *cresult = getenv(name.c_str());
+		std::string result = cresult ? cresult : "";
+		return result;
+	};
+	int cntp = 0;
+	std::string buffer;
+	kvm_t *kd = nullptr;
+	kinfo_proc *proc_info = nullptr;
+	bool error = false, retried = false;
+	kd = kvm_openfiles(nullptr, nullptr, nullptr, KVM_NO_FILES, nullptr);
+	if (kd) {
+		if ((proc_info = kvm_getprocs(kd, KERN_PROC_PID, getpid(), sizeof(struct kinfo_proc), &cntp))) {
+			char **cmd = kvm_getargv(kd, proc_info, 0);
+			if (cmd && cmd[0]) {
+				buffer = cmd[0];
+			}
+		}
+		kvm_close(kd);
+		std::string argv0;
+		if (!buffer.empty()) {
+		fallback:
+			std::size_t slash_pos = buffer.find('/');
+			std::size_t colon_pos = buffer.find(':');
+			if (slash_pos == 0) {
+				argv0 = buffer;
+				path = cpp_getexe(argv0);
+			} else if (slash_pos == std::string::npos || slash_pos > colon_pos) {
+				std::string penv = cpp_getenv("PATH");
+				if (!penv.empty()) {
+				retry:
+					std::string tmp;
+					std::stringstream sstr(penv);
+					while (std::getline(sstr, tmp, ':')) {
+						argv0 = tmp + "/" + buffer;
+						path = cpp_getexe(argv0);
+						if (!path.empty()) {
+							break;
+						}
+						if (slash_pos > colon_pos) {
+							argv0 = tmp + "/" + buffer.substr(0, colon_pos);
+							path = cpp_getexe(argv0);
+							if (!path.empty()) {
+								break;
+							}
+						}
+					}
+				}
+				if (path.empty() && !retried) {
+					retried = true;
+					penv = "/usr/bin:/bin:/usr/sbin:/sbin:/usr/X11R6/bin:/usr/local/bin:/usr/local/sbin";
+					std::string home = cpp_getenv("HOME");
+					if (!home.empty()) {
+						penv = home + "/bin:" + penv;
+					}
+					goto retry;
+				}
+			}
+			if (path.empty() && slash_pos > 0) {
+				std::string pwd = cpp_getenv("PWD");
+				if (!pwd.empty()) {
+					argv0 = pwd + "/" + buffer;
+					path = cpp_getexe(argv0);
+				}
+				if (path.empty()) {
+					char cwd[PATH_MAX];
+					if (getcwd(cwd, PATH_MAX)) {
+						argv0 = std::string(cwd) + "/" + buffer;
+						path = cpp_getexe(argv0);
+					}
+				}
+			}
+		}
+		if (path.empty() && !error) {
+			error = true;
+			buffer.clear();
+			std::string underscore = cpp_getenv("_");
+			if (!underscore.empty()) {
+				buffer = underscore;
+				goto fallback;
+			}
+		}
+	}
+	if (!path.empty()) {
+		return String::utf8(path.c_str());
+	}
 	char resolved_path[MAXPATHLEN];
-
 	realpath(OS::get_executable_path().utf8().get_data(), resolved_path);
-
-	return String(resolved_path);
+	WARN_PRINT("Couldn't get executable path from any of the methods tried");
+	return String::utf8(resolved_path);
+}
 #elif defined(__NetBSD__)
 	int mib[4] = { CTL_KERN, KERN_PROC_ARGS, -1, KERN_PROC_PATHNAME };
 	char buf[MAXPATHLEN];
@@ -1165,7 +1292,7 @@ String OS_Unix::get_executable_path() const {
 
 	realpath(buf, resolved_path);
 
-	return String(resolved_path);
+	return String::utf8(resolved_path);
 #elif defined(__FreeBSD__)
 	int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1 };
 	char buf[MAXPATHLEN];
