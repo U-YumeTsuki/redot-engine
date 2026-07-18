@@ -305,10 +305,13 @@ void EditorSettings::_get_property_list(List<PropertyInfo> *p_list) const {
 			pusage |= PROPERTY_USAGE_STORAGE;
 		}
 
+		// Settings prefixed with "_" or "projects/" are hidden from the
+		// Editor Settings UI but are always persisted to disk. Use the "_"
+		// prefix for internal/UI-state settings that should not be user-visible.
 		if (!E.name.begins_with("_") && !E.name.begins_with("projects/")) {
 			pusage |= PROPERTY_USAGE_EDITOR;
 		} else {
-			pusage |= PROPERTY_USAGE_STORAGE; //hiddens must always be saved
+			pusage |= PROPERTY_USAGE_STORAGE;
 		}
 
 		PropertyInfo pi(E.type, E.name);
@@ -1792,12 +1795,31 @@ HashMap<StringName, Color> EditorSettings::get_godot2_text_editor_theme() {
 	return colors;
 }
 
+const EditorSettings::BuiltinTextEditorTheme EditorSettings::BUILTIN_TEXT_EDITOR_THEMES[] = {
+	{ "Default", nullptr, true },
+	{ "Godot", nullptr, true },
+	{ "Godot 2", &EditorSettings::get_godot2_text_editor_theme, true },
+	{ "Custom", nullptr, false },
+	{ nullptr, nullptr, false }, // sentinel
+};
+
 bool EditorSettings::is_default_text_editor_theme(const String &p_theme_name) {
-	return p_theme_name == "default" || p_theme_name == "godot" || p_theme_name == "godot 2" || p_theme_name == "custom";
+	for (const BuiltinTextEditorTheme *e = BUILTIN_TEXT_EDITOR_THEMES; e->name; e++) {
+		if (p_theme_name == String(e->name).to_lower()) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void EditorSettings::update_text_editor_themes_list() {
-	String themes = "Default,Godot,Godot 2,Custom";
+	String themes;
+	for (const BuiltinTextEditorTheme *e = BUILTIN_TEXT_EDITOR_THEMES; e->name; e++) {
+		if (!themes.is_empty()) {
+			themes += ",";
+		}
+		themes += e->name;
+	}
 
 	Ref<DirAccess> d = DirAccess::open(EditorPaths::get_singleton()->get_text_editor_themes_dir());
 	if (d.is_null()) {

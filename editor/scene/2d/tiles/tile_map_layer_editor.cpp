@@ -825,7 +825,7 @@ void TileMapLayerEditorTilesPlugin::forward_canvas_draw_over_viewport(Control *p
 			// Do nothing.
 		} else {
 			Color grid_color = EDITOR_GET("editors/tiles_editor/grid_color");
-			Color selection_color = Color().from_hsv(Math::fposmod(grid_color.get_h() + 0.5, 1.0), grid_color.get_s(), grid_color.get_v(), 1.0);
+			Color selection_color = Color::from_hsv(Math::fposmod(grid_color.get_h() + 0.5, 1.0), grid_color.get_s(), grid_color.get_v(), 1.0);
 			tile_set->draw_cells_outline(p_overlay, tile_map_selection, selection_color, xform);
 		}
 	}
@@ -1815,7 +1815,7 @@ void TileMapLayerEditorTilesPlugin::_tile_atlas_control_draw() {
 
 	// Draw the selection.
 	Color grid_color = EDITOR_GET("editors/tiles_editor/grid_color");
-	Color selection_color = Color().from_hsv(Math::fposmod(grid_color.get_h() + 0.5, 1.0), grid_color.get_s(), grid_color.get_v(), 1.0);
+	Color selection_color = Color::from_hsv(Math::fposmod(grid_color.get_h() + 0.5, 1.0), grid_color.get_s(), grid_color.get_v(), 1.0);
 	for (const TileMapCell &E : tile_set_selection) {
 		int16_t untransformed_alternative_id = E.alternative_tile & TileSetAtlasSource::UNTRANSFORM_MASK;
 		if (E.source_id == source_id && untransformed_alternative_id == 0) {
@@ -4130,7 +4130,7 @@ void TileMapLayerEditor::_layers_select_next_or_previous(bool p_next) {
 				break;
 			}
 		}
-		new_selected_layer = tile_map_layers_in_scene_cache[Math::posmod(edited_index + inc, tile_map_layers_in_scene_cache.size())];
+		new_selected_layer = tile_map_layers_in_scene_cache[Math::posmod(static_cast<int64_t>(edited_index + inc), tile_map_layers_in_scene_cache.size())];
 	}
 
 	ERR_FAIL_NULL(new_selected_layer);

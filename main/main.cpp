@@ -60,6 +60,7 @@
 #include "core/os/os.h"
 #include "core/os/time.h"
 #include "core/register_core_types.h"
+#include "core/string/print_string.h"
 #include "core/string/translation_server.h"
 #include "core/version.h"
 #include "drivers/register_driver_types.h"
@@ -205,6 +206,7 @@ String display_driver = "";
 String tablet_driver = "";
 String text_driver = "";
 String rendering_driver = "";
+bool rendering_driver_available = false;
 String rendering_method = "";
 static int text_driver_idx = -1;
 static int audio_driver_idx = -1;
@@ -2598,6 +2600,61 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	// always convert to lower case for consistency in the code
 	rendering_driver = rendering_driver.to_lower();
 
+	// Verify rendering driver is available
+#ifdef D3D12_ENABLED
+	if (rendering_driver == "d3d12") {
+		rendering_driver_available = true;
+	}
+#endif
+#ifdef VULKAN_ENABLED
+	if (rendering_driver == "vulkan") {
+		rendering_driver_available = true;
+	}
+#endif
+#ifdef METAL_ENABLED
+	if (rendering_driver == "metal") {
+		rendering_driver_available = true;
+	}
+#endif
+#ifdef GLES3_ENABLED
+	if (rendering_driver == "opengl3" || rendering_driver == "opengl3_angle" || rendering_driver == "opengl3_es") {
+		rendering_driver_available = true;
+	}
+#endif
+	if (rendering_driver == "dummy") {
+		rendering_driver_available = true;
+	}
+	if (!rendering_driver_available) {
+		Vector<String> unique_rendering_drivers;
+		for (int i = 0; i < DisplayServer::get_create_function_count(); i++) {
+			Vector<String> r_drivers = DisplayServer::get_create_function_rendering_drivers(i);
+
+			for (int d = 0; d < r_drivers.size(); d++) {
+				if (!unique_rendering_drivers.has(r_drivers[d])) {
+					unique_rendering_drivers.append(r_drivers[d]);
+				}
+			}
+		}
+
+		String supported_drivers = "";
+		for (int i = 0; i < unique_rendering_drivers.size(); i++) {
+			if (i == unique_rendering_drivers.size() - 1) {
+				supported_drivers += " and ";
+			} else if (i != 0) {
+				supported_drivers += ", ";
+			}
+			supported_drivers += unique_rendering_drivers[i];
+		}
+		supported_drivers += ".";
+
+		ERR_PRINT(vformat(
+				"Rendering driver '%s' is not available in this engine build.\n"
+				"Edit your project file (project.godot) and change rendering_device/driver from '%s' to an available rendering driver.\n"
+				"Valid options are %s",
+				rendering_driver, rendering_driver, supported_drivers));
+		goto error;
+	}
+
 	OS::get_singleton()->set_current_rendering_driver_name(rendering_driver);
 	OS::get_singleton()->set_current_rendering_method(rendering_method);
 
@@ -3499,7 +3556,10 @@ Error Main::setup2(bool p_show_boot_logo) {
 		Color clear = GLOBAL_DEF_BASIC("rendering/environment/defaults/default_clear_color", get_boot_splash_bg_color());
 		RenderingServer::get_singleton()->set_default_clear_color(clear);
 
+		print_verbose(vformat("p_show_boot_logo value:  %s", String(p_show_boot_logo ? "true" : "false")));
 		if (p_show_boot_logo) {
+			print_verbose("Setting up boot logo...");
+			DisplayServer::get_singleton()->process_events();
 			setup_boot_logo();
 		}
 
@@ -5069,6 +5129,11 @@ void Main::cleanup(bool p_force) {
 	// Flush before uninitializing the scene, but delete the MessageQueue as late as possible.
 	message_queue->flush();
 
+	// Drain worker threads BEFORE deleting the SceneTree.
+	// Worker threads may hold references to scene objects; deleting the tree
+	// while they are still running causes use-after-free and deadlocks.
+	WorkerThreadPool::get_singleton()->exit_languages_threads();
+
 	OS::get_singleton()->delete_main_loop();
 
 	OS::get_singleton()->_cmdline.clear();
@@ -5077,15 +5142,12 @@ void Main::cleanup(bool p_force) {
 	OS::get_singleton()->_local_clipboard = "";
 
 	ResourceLoader::clear_translation_remaps();
-
-	WorkerThreadPool::get_singleton()->exit_languages_threads();
-
 	ScriptServer::finish_languages();
 
 	// Sync pending commands that may have been queued from a different thread during ScriptServer finalization
 	RenderingServer::get_singleton()->sync();
 
-	//clear global shader variables before scene and other graphics stuff are deinitialized.
+	// Clear global shader variables before scene and other graphics stuff are deinitialized.
 	rendering_server->global_shader_parameters_clear();
 
 #ifndef XR_DISABLED
