@@ -70,16 +70,16 @@
 #include "scene/gui/separator.h"
 #include "scene/main/window.h"
 #include "scene/theme/theme_db.h"
-#include "servers/display_server.h"
-#include "servers/navigation_server_3d.h"
-
-#ifndef PHYSICS_3D_DISABLED
-#include "servers/physics_server_3d.h"
-#endif // PHYSICS_3D_DISABLED
+#include "servers/display/display_server.h"
+#include "servers/navigation_3d/navigation_server_3d.h"
 
 #ifndef PHYSICS_2D_DISABLED
-#include "servers/physics_server_2d.h"
+#include "servers/physics_2d/physics_server_2d.h"
 #endif // PHYSICS_2D_DISABLED
+
+#ifndef PHYSICS_3D_DISABLED
+#include "servers/physics_3d/physics_server_3d.h"
+#endif // PHYSICS_3D_DISABLED
 
 constexpr int GODOT4_CONFIG_VERSION = 5;
 
@@ -1763,7 +1763,7 @@ ProjectManager::ProjectManager() {
 		ask_update_label->set_v_size_flags(SIZE_EXPAND_FILL);
 		ask_update_vb->add_child(ask_update_label);
 		ask_update_backup = memnew(CheckBox);
-		ask_update_backup->set_text(TTRC("Backup project first"));
+		ask_update_backup->set_text(TTRC("Back up project first"));
 		ask_update_backup->set_h_size_flags(SIZE_SHRINK_CENTER);
 		ask_update_vb->add_child(ask_update_backup);
 		ask_update_settings->get_ok_button()->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_open_selected_projects_with_migration));
