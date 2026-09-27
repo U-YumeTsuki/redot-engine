@@ -1,4 +1,4 @@
-# Redot Engine LTS authors
+# Redot Engine authors
 
 Redot is a Fork of the Godot Engine that is developed by a community of
 voluntary contributors who contribute code, bug reports, documentation,
@@ -35,10 +35,11 @@ name is available.
     Andevrs (tindrew)
     Arctis Fireblight
     ChocolateChipAussie (Logan-ReXDev)
-	DaveTheEggman
+    DaveTheEggman
     DAShoe1
     decryptedchaos
-	GeneralProtectionFault
+    Francisco Almeida (OldDev78)
+    GeneralProtectionFault
     George L Albany (spartan322)
     Jon (JoltedJon)
     McDubh (mcdubhghlas)

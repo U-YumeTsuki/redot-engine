@@ -501,6 +501,16 @@ void GDScriptFunction::disassemble(const Vector<String> &p_code_lines) const {
 
 				incr += 4;
 			} break;
+			case OPCODE_ASSIGN_TYPED_TRAIT: {
+				text += "assign typed trait (";
+				text += get_global_name(_code_ptr[ip + 3]);
+				text += ") ";
+				text += DADDR(1);
+				text += " = ";
+				text += DADDR(2);
+
+				incr += 4;
+			} break;
 			case OPCODE_CAST_TO_BUILTIN: {
 				text += "cast builtin ";
 				text += DADDR(2);
@@ -1006,6 +1016,27 @@ void GDScriptFunction::disassemble(const Vector<String> &p_code_lines) const {
 				int instr_var_args = _code_ptr[++ip];
 
 				text += "call-self-base ";
+
+				int argc = _code_ptr[ip + 1 + instr_var_args];
+				text += DADDR(2 + argc) + " = ";
+
+				text += _global_names_ptr[_code_ptr[ip + 2 + instr_var_args]];
+				text += "(";
+
+				for (int i = 0; i < argc; i++) {
+					if (i > 0) {
+						text += ", ";
+					}
+					text += DADDR(1 + i);
+				}
+				text += ")";
+
+				incr = 4 + argc;
+			} break;
+			case OPCODE_CALL_SELF_TRAIT: {
+				int instr_var_args = _code_ptr[++ip];
+
+				text += "call-self-trait ";
 
 				int argc = _code_ptr[ip + 1 + instr_var_args];
 				text += DADDR(2 + argc) + " = ";

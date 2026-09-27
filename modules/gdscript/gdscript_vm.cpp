@@ -299,6 +299,7 @@ void (*type_init_function_table[])(Variant *) = {
 		&&OPCODE_ASSIGN_TYPED_DICTIONARY,                \
 		&&OPCODE_ASSIGN_TYPED_NATIVE,                    \
 		&&OPCODE_ASSIGN_TYPED_SCRIPT,                    \
+		&&OPCODE_ASSIGN_TYPED_TRAIT,                     \
 		&&OPCODE_CAST_TO_BUILTIN,                        \
 		&&OPCODE_CAST_TO_NATIVE,                         \
 		&&OPCODE_CAST_TO_TRAIT,                          \
@@ -318,6 +319,7 @@ void (*type_init_function_table[])(Variant *) = {
 		&&OPCODE_CALL_GDSCRIPT_UTILITY,                  \
 		&&OPCODE_CALL_BUILTIN_TYPE_VALIDATED,            \
 		&&OPCODE_CALL_SELF_BASE,                         \
+		&&OPCODE_CALL_SELF_TRAIT,                        \
 		&&OPCODE_CALL_METHOD_BIND,                       \
 		&&OPCODE_CALL_METHOD_BIND_RET,                   \
 		&&OPCODE_CALL_BUILTIN_STATIC,                    \
@@ -1671,6 +1673,46 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 			}
 			DISPATCH_OPCODE;
 
+			OPCODE(OPCODE_ASSIGN_TYPED_TRAIT) {
+				CHECK_SPACE(4);
+				GET_VARIANT_PTR(dst, 0);
+				GET_VARIANT_PTR(src, 1);
+
+				int trait_type_idx = _code_ptr[ip + 3];
+				GD_ERR_BREAK(trait_type_idx < 0 || trait_type_idx >= _global_names_count);
+				const StringName trait_type = _global_names_ptr[trait_type_idx];
+
+#ifdef DEBUG_ENABLED
+				if (src->get_type() != Variant::OBJECT && src->get_type() != Variant::NIL) {
+					err_text = "Trying to assign a non-object value to a variable of trait '" + String(trait_type).replace("::", ".") + "'.";
+					OPCODE_BREAK;
+				}
+
+				if (src->get_type() == Variant::OBJECT) {
+					bool was_freed = false;
+					Object *val_obj = src->get_validated_object_with_check(was_freed);
+					if (!val_obj && was_freed) {
+						err_text = "Trying to assign invalid previously freed instance.";
+						OPCODE_BREAK;
+					}
+
+					if (val_obj) { // src is not null
+						ScriptInstance *scr_inst = val_obj->get_script_instance();
+						if (!scr_inst || !_is_class_using_trait(scr_inst->get_script().ptr(), trait_type)) {
+							err_text = "Trying to assign value of type '" + val_obj->get_class_name() +
+									"' to a variable of trait '" + String(trait_type).replace("::", ".") + "'.";
+							OPCODE_BREAK;
+						}
+					}
+				}
+#endif // DEBUG_ENABLED
+
+				*dst = *src;
+
+				ip += 4;
+			}
+			DISPATCH_OPCODE;
+
 			OPCODE(OPCODE_CAST_TO_BUILTIN) {
 				CHECK_SPACE(4);
 				GET_VARIANT_PTR(src, 0);
@@ -2629,6 +2671,43 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 					String methodstr = *methodname;
 					err_text = _get_call_error("function '" + methodstr + "'", (const Variant **)argptrs, argc, *dst, err);
 
+					OPCODE_BREAK;
+				}
+
+				ip += 3;
+			}
+			DISPATCH_OPCODE;
+
+			OPCODE(OPCODE_CALL_SELF_TRAIT) {
+				LOAD_INSTRUCTION_ARGS
+				CHECK_SPACE(3 + instr_arg_count);
+
+				ip += instr_arg_count;
+
+				int argc = _code_ptr[ip + 1];
+				GD_ERR_BREAK(argc < 0);
+				if (_trait_super_function == nullptr) {
+					err_text = "compiler bug, trait super function not found";
+					OPCODE_BREAK;
+				}
+
+				int self_fun = _code_ptr[ip + 2];
+#ifdef DEBUG_ENABLED
+				if (self_fun < 0 || self_fun >= _global_names_count) {
+					err_text = "compiler bug, function name not found";
+					OPCODE_BREAK;
+				}
+#endif
+				const StringName *methodname = &_global_names_ptr[self_fun];
+				Variant **argptrs = instruction_args;
+
+				GET_INSTRUCTION_ARG(dst, argc);
+
+				Callable::CallError err;
+				*dst = _trait_super_function->call(p_instance, (const Variant **)argptrs, argc, err);
+				if (err.error != Callable::CallError::CALL_OK) {
+					String methodstr = *methodname;
+					err_text = _get_call_error("trait function '" + methodstr + "'", (const Variant **)argptrs, argc, *dst, err);
 					OPCODE_BREAK;
 				}
 
