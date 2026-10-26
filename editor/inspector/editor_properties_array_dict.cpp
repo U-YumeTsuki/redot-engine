@@ -40,6 +40,8 @@
 
 #include "core/input/input.h"
 #include "core/io/marshalls.h"
+#include "core/io/resource_loader.h"
+#include "core/object/script_language.h"
 #include "core/variant/struct.h"
 #include "core/variant/struct_info.h"
 #include "editor/docks/inspector_dock.h"
@@ -243,21 +245,55 @@ String EditorPropertyDictionaryObject::get_label_for_index(int p_index) {
 
 ///////////////////// ARRAY ///////////////////////////
 
+static void _resolve_typed_object_hint(const String &p_hint_string, StringName &r_class, Ref<Script> &r_script) {
+	if (p_hint_string.is_empty()) {
+		return;
+	}
+	if (ClassDB::class_exists(p_hint_string)) {
+		r_class = p_hint_string;
+		return;
+	}
+
+	String script_path = p_hint_string;
+	if (ScriptServer::is_global_class(p_hint_string)) {
+		script_path = ScriptServer::get_global_class_path(p_hint_string);
+	} else if (script_path.contains("::")) {
+		script_path = script_path.get_slice("::", 0);
+	}
+	Ref<Script> hint_script;
+	if (script_path.is_resource_file()) {
+		hint_script = ResourceLoader::load(script_path);
+	}
+	if (hint_script.is_valid() && (hint_script->is_trait() || p_hint_string.contains("::"))) {
+		r_class = p_hint_string;
+	} else if (hint_script.is_valid()) {
+		r_class = hint_script->get_instance_base_type();
+		r_script = hint_script;
+	}
+}
+
 void EditorPropertyArray::initialize_array(Variant &p_array) {
 	if (array_type == Variant::ARRAY && subtype != Variant::NIL) {
 		Array array;
 		StringName subtype_class;
 		Ref<Script> subtype_script;
-		if (subtype == Variant::OBJECT && !subtype_hint_string.is_empty()) {
-			if (ClassDB::class_exists(subtype_hint_string)) {
-				subtype_class = subtype_hint_string;
-			}
+		if (subtype == Variant::OBJECT) {
+			_resolve_typed_object_hint(subtype_hint_string, subtype_class, subtype_script);
 		}
 		array.set_typed(subtype, subtype_class, subtype_script);
 		p_array = array;
 	} else {
 		VariantInternal::initialize(&p_array, array_type);
 	}
+}
+
+bool EditorPropertyArray::_get_struct_element_default(Variant &r_value) {
+	if (subtype != Variant::STRUCT || !get_edited_object()) {
+		return false;
+	}
+	Ref<Script> editedScript = get_edited_object()->get_script();
+	return editedScript.is_valid() && editedScript->get_property_array_element_default_value(get_edited_property(), r_value) &&
+			r_value.get_type() == Variant::STRUCT && !Struct(r_value).is_null();
 }
 
 void EditorPropertyArray::_property_changed(const String &p_property, Variant p_value, const String &p_name, bool p_changing) {
@@ -836,7 +872,14 @@ void EditorPropertyArray::_length_changed(double p_page) {
 	}
 
 	Variant array = object->get_array().duplicate();
+	const int old_size = array.call("size");
 	array.call("resize", int(p_page));
+	Variant element_default;
+	if (_get_struct_element_default(element_default)) {
+		for (int i = old_size; i < int(p_page); i++) {
+			array.set(i, element_default.duplicate(true));
+		}
+	}
 
 	emit_changed(get_edited_property(), array);
 }
@@ -993,13 +1036,13 @@ void EditorPropertyDictionary::initialize_dictionary(Variant &p_dictionary) {
 		Dictionary dict;
 		StringName key_subtype_class;
 		Ref<Script> key_subtype_script;
-		if (key_subtype == Variant::OBJECT && !key_subtype_hint_string.is_empty() && ClassDB::class_exists(key_subtype_hint_string)) {
-			key_subtype_class = key_subtype_hint_string;
+		if (key_subtype == Variant::OBJECT) {
+			_resolve_typed_object_hint(key_subtype_hint_string, key_subtype_class, key_subtype_script);
 		}
 		StringName value_subtype_class;
 		Ref<Script> value_subtype_script;
-		if (value_subtype == Variant::OBJECT && !value_subtype_hint_string.is_empty() && ClassDB::class_exists(value_subtype_hint_string)) {
-			value_subtype_class = value_subtype_hint_string;
+		if (value_subtype == Variant::OBJECT) {
+			_resolve_typed_object_hint(value_subtype_hint_string, value_subtype_class, value_subtype_script);
 		}
 		dict.set_typed(key_subtype, key_subtype_class, key_subtype_script, value_subtype, value_subtype_class, value_subtype_script);
 		p_dictionary = dict;
@@ -1653,6 +1696,35 @@ void EditorPropertyStruct::_clear_property_editors() {
 	built_layout_hash = 0;
 }
 
+/// Resolves script class names without retaining scripts in the shared struct schema.
+static String _struct_resource_hint(const StringName &p_class_name) {
+	if (ClassDB::is_parent_class(p_class_name, SNAME("Resource"))) {
+		return p_class_name;
+	}
+	const Vector<String> names = String(p_class_name).split("::");
+	String path = names[0];
+	if (ScriptServer::is_global_class(path)) {
+		path = ScriptServer::get_global_class_path(path);
+	}
+	if (!path.is_resource_file()) {
+		return String();
+	}
+	Ref<Script> script = ResourceLoader::load(path, "Script");
+	for (int i = 1; script.is_valid() && i < names.size(); i++) {
+		HashMap<StringName, Variant> constants;
+		script->get_constants(&constants);
+		const Variant *inner = constants.getptr(names[i]);
+		script = inner != nullptr ? Ref<Script>(*inner) : Ref<Script>();
+	}
+	if (script.is_null() || !ClassDB::is_parent_class(script->get_instance_base_type(), SNAME("Resource"))) {
+		return String();
+	}
+	if (!script->is_trait() && script->get_global_name() != StringName()) {
+		return script->get_global_name();
+	}
+	return script->get_instance_base_type();
+}
+
 void EditorPropertyStruct::_rebuild_property_editors(const Variant &p_value) {
 	_clear_property_editors();
 
@@ -1680,9 +1752,11 @@ void EditorPropertyStruct::_rebuild_property_editors(const Variant &p_value) {
 			// through a value-semantics struct (a NODE_TYPE editor edits a NodePath, not an object),
 			// so non-resource objects fall back to the generic object editor.
 			const StringName class_name = info->get_field_class_name(i);
-			if (class_name != StringName() && ClassDB::is_parent_class(class_name, SNAME("Resource"))) {
+			if (class_name != StringName()) {
+				hint_string = _struct_resource_hint(class_name);
+			}
+			if (!hint_string.is_empty()) {
 				hint = PROPERTY_HINT_RESOURCE_TYPE;
-				hint_string = class_name;
 				is_resource = true;
 			}
 		}

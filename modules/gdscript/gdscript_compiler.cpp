@@ -153,6 +153,8 @@ GDScriptDataType GDScriptCompiler::_gdtype_from_datatype(const GDScriptParser::D
 		case GDScriptParser::DataType::TRAIT: {
 			result.kind = GDScriptDataType::GDTRAIT;
 			result.trait_type = p_datatype.class_type->fqcn;
+			result.builtin_type = Variant::OBJECT;
+			result.native_type = result.trait_type;
 		} break;
 		case GDScriptParser::DataType::CLASS: {
 			if (p_handle_metatype && p_datatype.is_meta_type) {
@@ -3383,6 +3385,7 @@ Error GDScriptCompiler::compile(const GDScriptParser *p_parser, GDScript *p_scri
 
 	// Create scripts for subclasses beforehand so they can be referenced
 	make_scripts(p_script, root, p_keep_state);
+	p_script->file_trait = parser->is_file_trait();
 
 	if (parser->is_file_trait()) {
 		// No need to compile traits.

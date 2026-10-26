@@ -200,7 +200,6 @@ private:
 
 	WorldScape3DUI *_ui = nullptr;
 	WorldScape3D *_last_terrain = nullptr;
-	WorldScape3DAssetDock *_asset_dock = nullptr;
 	NavigationRegion3D *_nav_region = nullptr;
 	Ref<SceneTreeTimer> _scene_change_timer;
 
@@ -215,7 +214,7 @@ private:
 	Vector3 _mouse_global_position;
 	Vector2 _current_region_pos;
 	Ref<WorldScape3DRegionGizmo> _region_gizmo;
-	Window *_rex_editor_window = nullptr;
+	Window *_redot_editor_window = nullptr;
 
 	void init();
 
@@ -230,8 +229,8 @@ public:
 	WorldScape3D *get_last_terrain() const;
 	NavigationRegion3D *get_nav_region() const { return _nav_region; }
 
-	WorldScape3DAssetDock *get_asset_dock() const { return _asset_dock; }
-	Window *get_rex_editor_window() const { return _rex_editor_window; }
+	WorldScape3DAssetDock *get_asset_dock() const;
+	Window *get_redot_editor_window() const { return _redot_editor_window; }
 
 	bool is_selected() const;
 	void select_terrain();

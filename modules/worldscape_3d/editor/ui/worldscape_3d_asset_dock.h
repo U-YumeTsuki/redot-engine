@@ -46,6 +46,7 @@
 #include "../../worldscape_3d_assets.h"
 #include "../worldscape_3d_editor.h"
 #include "scene/main/window.h"
+#include "worldscape_3d_ui.h"
 
 class ConfirmationDialog;
 class ScrollContainer;
@@ -97,7 +98,6 @@ class ListEntry : public MarginContainer {
 
 public:
 	explicit ListEntry(WorldScape3DAssets::AssetType type);
-	~ListEntry() override;
 
 	void set_assets(Ref<WorldScape3DAssets> assets_list) {
 		_asset_list = assets_list;
@@ -190,6 +190,8 @@ private:
 class WorldScape3DAssetDock final : public PanelContainer {
 	GDCLASS(WorldScape3DAssetDock, PanelContainer);
 
+	friend WorldScape3DUI;
+
 	WorldScape3DEditorPlugin *_plugin = nullptr;
 
 	ListContainer *_texture_list = nullptr;
@@ -235,17 +237,18 @@ class WorldScape3DAssetDock final : public PanelContainer {
 	bool _initialized = false;
 
 	Window *_window = nullptr;
-	Window::Mode _rex_editor_last_state = Window::Mode::MODE_FULLSCREEN;
+	Window::Mode _redot_editor_last_state = Window::Mode::MODE_FULLSCREEN;
 
 	Window *get_grandparent() const;
 
 	void create_layout();
 
+	void setup_theme();
+
 	void init();
 
 public:
 	explicit WorldScape3DAssetDock(WorldScape3DEditorPlugin *plugin);
-	~WorldScape3DAssetDock() override;
 
 	ListContainer *get_current_list() const { return _current_list; }
 	ConfirmationDialog *get_confirmation_dialog() const { return _confirm_dialog; }
@@ -273,9 +276,9 @@ public:
 	void create_window();
 	void clamp_window_position();
 	void on_window_input(Ref<InputEvent> event);
-	void on_rex_window_entered();
-	void on_rex_focus_entered();
-	void on_rex_focus_exited();
+	void on_redot_window_entered();
+	void on_redot_focus_entered();
+	void on_redot_focus_exited();
 
 	// Settings management
 	void load_editor_settings();

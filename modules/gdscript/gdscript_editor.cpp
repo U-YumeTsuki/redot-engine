@@ -180,6 +180,7 @@ bool GDScriptLanguage::validate(const String &p_script, const String &p_path, Li
 				e.line = pe.line;
 				e.column = pe.column;
 				e.message = pe.message;
+				e.related_error = pe.related_error;
 				r_errors->push_back(e);
 			}
 
@@ -191,6 +192,7 @@ bool GDScriptLanguage::validate(const String &p_script, const String &p_path, Li
 					e.line = pe.line;
 					e.column = pe.column;
 					e.message = pe.message;
+					e.related_error = pe.related_error;
 					r_errors->push_back(e);
 				}
 			}
@@ -1113,6 +1115,12 @@ static void _list_available_types(bool p_inherit_only, bool p_include_trait, GDS
 					case GDScriptParser::ClassNode::Member::CLASS: {
 						ScriptLanguage::CodeCompletionOption option(member.m_class->identifier->name, ScriptLanguage::CODE_COMPLETION_KIND_CLASS, ScriptLanguage::LOCATION_LOCAL + location_offset);
 						r_result.insert(option.display, option);
+					} break;
+					case GDScriptParser::ClassNode::Member::STRUCT: {
+						if (!p_inherit_only) {
+							ScriptLanguage::CodeCompletionOption option(member.m_struct->identifier->name, ScriptLanguage::CODE_COMPLETION_KIND_CLASS, ScriptLanguage::LOCATION_LOCAL + location_offset);
+							r_result.insert(option.display, option);
+						}
 					} break;
 					case GDScriptParser::ClassNode::Member::TRAIT: {
 						if (p_include_trait) {
@@ -4126,6 +4134,11 @@ static Error _lookup_symbol_from_base(const GDScriptParser::DataType &p_base, co
 					case GDScriptParser::ClassNode::Member::ENUM_VALUE:
 						r_result.type = ScriptLanguage::LOOKUP_RESULT_CLASS_CONSTANT;
 						break;
+				}
+
+				const GDScriptParser::ClassNode *declaring_class = member.get_source_node()->declaring_class;
+				if (declaring_class != nullptr) {
+					base_type = declaring_class->get_datatype();
 				}
 
 				if (member.type != GDScriptParser::ClassNode::Member::TRAIT && member.type != GDScriptParser::ClassNode::Member::CLASS && member.type != GDScriptParser::ClassNode::Member::STRUCT) {

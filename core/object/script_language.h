@@ -149,6 +149,8 @@ protected:
 
 	friend class PlaceHolderScriptInstance;
 	virtual void _placeholder_erased(PlaceHolderScriptInstance *p_placeholder) {}
+	/// Checks language-specific export constraints before preserving a placeholder value.
+	virtual bool _placeholder_value_is_valid(const StringName &p_name, const Variant &p_value) const { return true; }
 
 	Variant _get_property_default_value(const StringName &p_property);
 	TypedArray<Dictionary> _get_script_property_list();
@@ -169,7 +171,13 @@ public:
 
 	virtual Ref<Script> get_base_script() const = 0; //< For script inheritance
 	virtual StringName get_global_name() const = 0;
+	/// Returns a persistent class identifier, including the enclosing classes for inner classes.
+	virtual StringName get_qualified_class_name() const;
 	virtual bool inherits_script(const Ref<Script> &p_script) const = 0;
+	/// Returns whether this script defines a trait.
+	virtual bool is_trait() const { return false; }
+	/// Returns whether instances of this script implement the named trait.
+	virtual bool has_trait(const StringName &p_trait) const { return false; }
 
 	virtual StringName get_instance_base_type() const = 0; ///< This may not work in all scripts, will return empty if so
 	virtual ScriptInstance *instance_create(Object *p_this) = 0;
@@ -206,6 +214,8 @@ public:
 	virtual void get_script_signal_list(List<MethodInfo> *r_signals) const = 0;
 
 	virtual bool get_property_default_value(const StringName &p_property, Variant &r_value) const = 0;
+	/// Returns a schema-backed default for elements of a script-defined array property, when available.
+	virtual bool get_property_array_element_default_value(const StringName &p_property, Variant &r_value) const { return false; }
 
 	virtual void update_exports() {} ///< Editor tool
 	virtual void get_script_method_list(List<MethodInfo> *p_list) const = 0;
@@ -247,10 +257,18 @@ public:
 	};
 
 	struct ScriptError {
+		struct RelatedError {
+			String path;
+			int line = -1;
+			int column = -1;
+			String message;
+		};
+
 		String path;
 		int line = -1;
 		int column = -1;
 		String message;
+		RelatedError related_error;
 	};
 
 	enum TemplateLocation {

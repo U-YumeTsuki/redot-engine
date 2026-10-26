@@ -184,18 +184,6 @@ WorldScape3DToolbar::WorldScape3DToolbar(WorldScape3DEditor *editor) :
 			SNAME("TerrainInstancer"), WorldScape3DEditor::Operation::SUBTRACT, "Remove Meshes (I)");
 }
 
-WorldScape3DToolbar::~WorldScape3DToolbar() {
-	_add_tools->disconnect("pressed", callable_mp(this, &WorldScape3DToolbar::on_tool_selected));
-	_sub_tools->disconnect("pressed", callable_mp(this, &WorldScape3DToolbar::on_tool_selected));
-	List<BaseButton *> buttons;
-	_add_tools->get_buttons(&buttons);
-	_sub_tools->get_buttons(&buttons);
-	for (auto *button : buttons) {
-		button->set_button_group(nullptr);
-		button->queue_free();
-	}
-}
-
 Button *WorldScape3DToolbar::find_button(const StringName &icon) const {
 	List<BaseButton *> buttons;
 	_add_tools->get_buttons(&buttons);
@@ -300,33 +288,8 @@ WorldScape3DUI::WorldScape3DUI(WorldScape3DEditorPlugin *plugin) :
 	img->convert(Image::FORMAT_R8);
 	_ring_texture = ImageTexture::create_from_image(img);
 	editor_ring_texture_rid = _ring_texture->get_rid();
-}
 
-WorldScape3DUI::~WorldScape3DUI() {
-	if (_plugin) {
-		using enum EditorPlugin::CustomControlContainer;
-		_plugin->remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, _menu);
-		_plugin->remove_control_from_container(CONTAINER_SPATIAL_EDITOR_BOTTOM, _tool_settings);
-		_plugin->remove_control_from_container(CONTAINER_SPATIAL_EDITOR_SIDE_LEFT, _toolbar);
-	}
-	if (_editor_decal_timer) {
-		_editor_decal_timer->queue_free();
-	}
-	if (_toolbar) {
-		_toolbar->queue_free();
-	}
-	if (_menu) {
-		_menu->queue_free();
-	}
-	if (_tool_settings) {
-		if (_tool_settings->is_connected("setting_changed", callable_mp(this, &WorldScape3DUI::on_setting_changed))) {
-			_tool_settings->disconnect("setting_changed", callable_mp(this, &WorldScape3DUI::on_setting_changed));
-		}
-		if (_tool_settings->is_connected("picking", callable_mp(_tool_settings, &WorldScape3DToolSettings::on_pick))) {
-			_tool_settings->disconnect("picking", callable_mp(_tool_settings, &WorldScape3DToolSettings::on_pick));
-		}
-		_tool_settings->queue_free();
-	}
+	_asset_dock = memnew(WorldScape3DAssetDock(plugin));
 }
 
 void WorldScape3DUI::on_visible_update() {
@@ -437,7 +400,7 @@ void WorldScape3DUI::update_decal() {
 			editor_brush_texture_rid = texture->get_rid();
 		}
 		real_t decal_size = _brush_data["size"];
-		editor_decal_size.set(0, std::max(decal_size, .5f));
+		editor_decal_size.set(0, std::max(decal_size, static_cast<real_t>(.5f)));
 		if (_brush_data.has("align_to_view") && bool{ _brush_data["align_to_view"] }) {
 			auto cam = terrain->get_camera();
 			editor_decal_rotation.set(0, cam ? cam->get_rotation().y : 0.f);
@@ -617,7 +580,8 @@ void WorldScape3DUI::reset_decals() {
 			editor_decal_color.set(i, Color{});
 			editor_decal_visible.set(i, false);
 		}
-		editor_brush_texture_rid = RID{};
+		RenderingServer::get_singleton()->free(editor_brush_texture_rid);
+		editor_brush_texture_rid = RID();
 	}
 }
 
@@ -672,7 +636,7 @@ void WorldScape3DUI::pick(Vector3 global_pos) {
 		switch (_picking) {
 			case WorldScape3DEditor::Tool::HEIGHT:
 			case WorldScape3DEditor::Tool::SCULPT:
-				color = Color{ terrain->get_data()->get_height(global_pos), 0.f, 0.f, 1.f };
+				color = Color(terrain->get_data()->get_height(global_pos), 0.f, 0.f, 1.f);
 				break;
 			case WorldScape3DEditor::Tool::ROUGHNESS:
 				color = terrain->get_data()->get_pixel(WorldScape3DRegion::TYPE_COLOR, global_pos);
@@ -681,10 +645,10 @@ void WorldScape3DUI::pick(Vector3 global_pos) {
 				color = terrain->get_data()->get_color(global_pos);
 				break;
 			case WorldScape3DEditor::Tool::ANGLE:
-				color = Color{ terrain->get_data()->get_control_angle(global_pos), 0.f, 0.f, 1.f };
+				color = Color(terrain->get_data()->get_control_angle(global_pos), 0.f, 0.f, 1.f);
 				break;
 			case WorldScape3DEditor::Tool::SCALE:
-				color = Color{ terrain->get_data()->get_control_scale(global_pos), 0.f, 0.f, 1.f };
+				color = Color(terrain->get_data()->get_control_scale(global_pos), 0.f, 0.f, 1.f);
 				break;
 			default:
 				print_error("Unsupported picking type");
@@ -735,6 +699,8 @@ void WorldScape3DUI::set_visible(bool visible, bool menu_only) {
 		return;
 	}
 	_visible = visible;
+	_asset_dock->set_visible(_visible);
+	_asset_dock->update_dock();
 	_menu->set_visible(_visible);
 	_toolbar->set_visible(menu_only ? false : _visible);
 	_tool_settings->set_visible(menu_only ? false : _visible);
@@ -905,13 +871,14 @@ void WorldScape3DUI::on_tool_changed(const WorldScape3DEditor::Tool tool, const 
 }
 
 void WorldScape3DUI::on_setting_changed(const Variant &setting) {
-	auto asset_dock = _plugin->get_asset_dock();
-	if (!asset_dock) {
+	if (!_asset_dock) {
 		return; // Skip function if not ready
 	}
 
 	_brush_data = _tool_settings->get_brush_data();
-	_brush_data.set("asset_id", asset_dock->get_current_list()->get_selected_id());
+	if (auto asset_list = _asset_dock->get_current_list(); asset_list) {
+		_brush_data.set("asset_id", asset_list->get_selected_id());
+	}
 	if (auto editor = _plugin->get_editor(); editor) {
 		editor->set_brush_data(_brush_data);
 	}
@@ -945,6 +912,18 @@ void WorldScape3DUI::_notification(int what) {
 	switch (what) {
 		case NOTIFICATION_ENTER_TREE: {
 			on_tool_changed(WorldScape3DEditor::Tool::REGION, WorldScape3DEditor::Operation::ADD);
+			break;
+		}
+		case Node::NOTIFICATION_POST_ENTER_TREE: {
+			if (_asset_dock) {
+				_asset_dock->init();
+			}
+			break;
+		}
+		case Node::NOTIFICATION_PREDELETE: {
+			if (_asset_dock && !_asset_dock->get_parent()) {
+				_asset_dock->queue_free();
+			}
 			break;
 		}
 		default:

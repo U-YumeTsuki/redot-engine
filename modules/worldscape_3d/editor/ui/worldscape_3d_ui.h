@@ -45,6 +45,7 @@
 class EditorPlugin;
 class EditorFileDialog;
 class WorldScape3DMenu;
+class WorldScape3DAssetDock;
 class WorldScape3DOperationBuilder;
 
 class WorldScape3DToolbar final : public VFlowContainer {
@@ -56,7 +57,6 @@ class WorldScape3DToolbar final : public VFlowContainer {
 
 public:
 	explicit WorldScape3DToolbar(WorldScape3DEditor *editor);
-	~WorldScape3DToolbar() override;
 
 	Button *find_button(const StringName &icon) const;
 
@@ -96,6 +96,7 @@ class WorldScape3DUI final : public Node {
 	Ref<ImageTexture> _region_texture = nullptr;
 	WorldScape3DEditorPlugin *_plugin = nullptr;
 	WorldScape3DMenu *_menu = nullptr;
+	WorldScape3DAssetDock *_asset_dock = nullptr;
 	WorldScape3DToolbar *_toolbar = nullptr;
 	WorldScape3DToolSettings *_tool_settings = nullptr;
 	bool _settings_has_changed = false;
@@ -133,7 +134,6 @@ class WorldScape3DUI final : public Node {
 public:
 	explicit WorldScape3DUI(WorldScape3DEditorPlugin *plugin);
 	WorldScape3DUI() = default;
-	~WorldScape3DUI() override;
 
 	void on_visible_update();
 
@@ -162,6 +162,7 @@ public:
 
 	WorldScape3DMenu *get_menu() const { return _menu; }
 	WorldScape3DToolbar *get_toolbar() const { return _toolbar; }
+	WorldScape3DAssetDock *get_asset_dock() const { return _asset_dock; }
 	WorldScape3DToolSettings *get_tool_settings() const { return _tool_settings; }
 
 	void set_menu_visibility(Control *list, bool visible);

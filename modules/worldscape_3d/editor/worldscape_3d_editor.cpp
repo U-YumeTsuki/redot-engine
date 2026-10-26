@@ -905,14 +905,12 @@ void WorldScape3DEditor::stop_operation() {
 void WorldScape3DEditorPlugin::init() {
 	_editor_settings = EditorSettings::get_singleton();
 
-	// Get the ReX Editor window. Structure is root:Window/EditorNode/Base Control
-	_rex_editor_window = cast_to<Window>(EditorInterface::get_singleton()->get_base_control()->get_parent()->get_parent());
-	_rex_editor_window->connect("focus_entered", callable_mp(this, &WorldScape3DEditorPlugin::on_focus_entered));
+	// Get the Redot Editor window. Structure is root:Window/EditorNode/Base Control
+	_redot_editor_window = cast_to<Window>(EditorInterface::get_singleton()->get_base_control()->get_parent()->get_parent());
+	_redot_editor_window->connect("focus_entered", callable_mp(this, &WorldScape3DEditorPlugin::on_focus_entered));
 
 	_ui = memnew(WorldScape3DUI(this));
 	add_child(_ui);
-
-	_asset_dock = memnew(WorldScape3DAssetDock(this));
 
 	EditorPlugin::connect("scene_changed", callable_mp(this, &WorldScape3DEditorPlugin::on_scene_changed));
 
@@ -926,17 +924,18 @@ WorldScape3DEditorPlugin::WorldScape3DEditorPlugin() :
 }
 
 WorldScape3DEditorPlugin::~WorldScape3DEditorPlugin() {
-	_asset_dock->queue_free();
-	_ui->queue_free();
-
-	if (_rex_editor_window && _rex_editor_window->is_connected("focus_entered", callable_mp(this, &WorldScape3DEditorPlugin::on_focus_entered))) {
-		_rex_editor_window->disconnect("focus_entered", callable_mp(this, &WorldScape3DEditorPlugin::on_focus_entered));
+	if (_redot_editor_window && _redot_editor_window->is_connected("focus_entered", callable_mp(this, &WorldScape3DEditorPlugin::on_focus_entered))) {
+		_redot_editor_window->disconnect("focus_entered", callable_mp(this, &WorldScape3DEditorPlugin::on_focus_entered));
 	}
 	EditorPlugin::disconnect("scene_changed", callable_mp(this, &WorldScape3DEditorPlugin::on_scene_changed));
 }
 
 WorldScape3DEditor *WorldScape3DEditorPlugin::get_editor() const {
 	return _editor.get();
+}
+
+WorldScape3DAssetDock *WorldScape3DEditorPlugin::get_asset_dock() const {
+	return _ui->get_asset_dock();
 }
 
 WorldScape3D *WorldScape3DEditorPlugin::get_terrain() const {
@@ -967,14 +966,14 @@ void WorldScape3DEditorPlugin::select_terrain() {
 }
 
 void WorldScape3DEditorPlugin::make_visible(const bool visible) {
-	if (visible && is_selected()) {
-		_ui->set_visible(true);
-	} else {
-		_ui->set_visible(false);
-	}
-	if (_asset_dock->is_visible() != visible) {
-		_asset_dock->set_visible(visible);
-		_asset_dock->update_dock();
+	const bool terrain_visible = visible && is_selected();
+	_ui->set_visible(terrain_visible);
+	auto dock = _ui->get_asset_dock();
+	if (dock) {
+		if (dock->is_visible() != terrain_visible) {
+			dock->set_visible(terrain_visible);
+			dock->update_dock();
+		}
 	}
 }
 
@@ -1010,10 +1009,14 @@ void WorldScape3DEditorPlugin::edit(Object *object) {
 		}
 
 		// Get alerted when a new asset list is loaded
-		if (!terrain->is_connected("assets_changed", callable_mp(_asset_dock, &WorldScape3DAssetDock::update_assets))) {
-			terrain->connect("assets_changed", callable_mp(_asset_dock, &WorldScape3DAssetDock::update_assets));
+		auto dock = _ui->get_asset_dock();
+		if (dock) {
+			if (!terrain->is_connected("assets_changed", callable_mp(dock, &WorldScape3DAssetDock::update_assets))) {
+				terrain->connect("assets_changed", callable_mp(dock, &WorldScape3DAssetDock::update_assets));
+			}
+			dock->update_dock();
 		}
-		_asset_dock->update_assets();
+
 		// Get alerted when the region map changes
 		auto tdata = terrain->get_data();
 		if (tdata && !tdata->is_connected("region_map_changed", callable_mp(this, &WorldScape3DEditorPlugin::update_region_grid))) {
@@ -1067,6 +1070,7 @@ void WorldScape3DEditorPlugin::clear() {
 	}
 	_editor->set_terrain(nullptr);
 	_ui->clear_picking();
+	_ui->set_visible(false);
 	_region_gizmo->clear();
 }
 
@@ -1081,14 +1085,18 @@ void WorldScape3DEditorPlugin::on_scene_changed(Node *scene_root) {
 	// 	t3dobj->editor_setup(this);
 	// }
 
-	_asset_dock->update_assets();
+	auto dock = _ui->get_asset_dock();
+	if (dock) {
+		dock->update_assets();
+	}
 	_scene_change_timer = get_tree()->create_timer(2.);
 	_scene_change_timer->connect("timeout", callable_mp(this, &WorldScape3DEditorPlugin::on_scene_change_timeout));
 }
 
 void WorldScape3DEditorPlugin::on_scene_change_timeout() {
-	if (_asset_dock) {
-		_asset_dock->update_thumbnails();
+	auto dock = _ui->get_asset_dock();
+	if (dock) {
+		dock->update_thumbnails();
 	}
 }
 

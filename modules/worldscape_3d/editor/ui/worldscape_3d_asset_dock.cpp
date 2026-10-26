@@ -35,6 +35,9 @@
 #include "worldscape_3d_asset_dock.h"
 
 #include "editor/editor_interface.h"
+#include "editor/editor_log.h"
+#include "editor/editor_node.h"
+#include "editor/gui/editor_bottom_panel.h"
 #include "editor/settings/event_listener_line_edit.h"
 #include "scene/gui/dialogs.h"
 #include "scene/gui/label.h"
@@ -88,6 +91,9 @@ void ListEntry::init() {
 	add_theme_constant_override("margin_top", 5);
 	add_theme_constant_override("margin_left", 5);
 	add_theme_constant_override("margin_right", 5);
+	if (!_label_rows) {
+		_label_rows = memnew(VBoxContainer);
+	}
 	if (!get_children().has(_label_rows)) {
 		add_child(_label_rows, true);
 	}
@@ -99,31 +105,7 @@ void ListEntry::init() {
 
 ListEntry::ListEntry(const WorldScape3DAssets::AssetType type) {
 	set_name("ListEntry");
-
 	_type = type;
-	_label_rows = memnew(VBoxContainer);
-	_margin = memnew(MarginContainer);
-	_button_row = memnew(FlowContainer);
-	_button_clear = memnew(TextureButton);
-	_button_edit = memnew(TextureButton);
-	_spacer = memnew(Control);
-	_button_enabled = memnew(TextureButton);
-}
-
-ListEntry::~ListEntry() {
-	if (_count_label) {
-		_count_label->queue_free();
-	}
-	if (_name_label) {
-		_name_label->queue_free();
-	}
-	_button_enabled->queue_free();
-	_spacer->queue_free();
-	_button_edit->queue_free();
-	_button_clear->queue_free();
-	_button_row->queue_free();
-	_margin->queue_free();
-	_label_rows->queue_free();
 }
 
 void ListEntry::_bind_methods() {
@@ -231,6 +213,9 @@ void ListEntry::mouse_exit() {
 void ListEntry::setup_buttons() {
 	static constexpr Vector2 icon_size{ 12, 12 };
 
+	if (!_margin) {
+		_margin = memnew(MarginContainer);
+	}
 	_margin->set_mouse_filter(MOUSE_FILTER_PASS);
 	_margin->add_theme_constant_override("margin_top", 5);
 	_margin->add_theme_constant_override("margin_left", 5);
@@ -239,6 +224,9 @@ void ListEntry::setup_buttons() {
 		add_child(_margin);
 	}
 
+	if (!_button_row) {
+		_button_row = memnew(FlowContainer);
+	}
 	_button_row->set_h_size_flags(SIZE_EXPAND_FILL);
 	_button_row->set_alignment(FlowContainer::ALIGNMENT_CENTER);
 	_button_row->set_mouse_filter(Control::MOUSE_FILTER_PASS);
@@ -247,6 +235,9 @@ void ListEntry::setup_buttons() {
 	}
 
 	if (_type == WorldScape3DAssets::TYPE_MESH) {
+		if (!_button_enabled) {
+			_button_enabled = memnew(TextureButton);
+		}
 		_button_enabled->set_texture_normal(_enabled_icon);
 		_button_enabled->set_texture_pressed(_disabled_icon);
 		_button_enabled->set_custom_minimum_size(icon_size);
@@ -264,6 +255,9 @@ void ListEntry::setup_buttons() {
 		}
 	}
 
+	if (!_button_edit) {
+		_button_edit = memnew(TextureButton);
+	}
 	_button_edit->set_texture_normal(_edit_icon);
 	_button_edit->set_custom_minimum_size(icon_size);
 	_button_edit->set_h_size_flags(Control::SIZE_SHRINK_END);
@@ -278,12 +272,18 @@ void ListEntry::setup_buttons() {
 		_button_row->add_child(_button_edit, true);
 	}
 
+	if (!_spacer) {
+		_spacer = memnew(Control);
+	}
 	_spacer->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	_spacer->set_mouse_filter(Control::MOUSE_FILTER_PASS);
 	if (!_button_row->get_children().has(_spacer)) {
 		_button_row->add_child(_spacer, true);
 	}
 
+	if (!_button_clear) {
+		_button_clear = memnew(TextureButton);
+	}
 	_button_clear->set_texture_normal(_clear_icon);
 	_button_clear->set_custom_minimum_size(icon_size);
 	_button_clear->set_h_size_flags(Control::SIZE_SHRINK_END);
@@ -864,6 +864,19 @@ void WorldScape3DAssetDock::create_layout() {
 	}
 }
 
+void WorldScape3DAssetDock::setup_theme() {
+	// Setup styles
+	set("theme_override_styles/panel", get_theme_stylebox("panel", "Panel"));
+	// Avoid saving icon resources in tscn when editing w/ a tool script
+	auto scene_root = EditorInterface::get_singleton()->get_edited_scene_root();
+	if (scene_root != this) {
+		_pinned_btn->set_button_icon(get_theme_icon("Pin", "EditorIcons"));
+		_pinned_btn->set_text("");
+		_floating_btn->set_button_icon(get_theme_icon("MakeFloating", "EditorIcons"));
+		_floating_btn->set_text("");
+	}
+}
+
 void WorldScape3DAssetDock::init() {
 	if (!_initialized) {
 		return;
@@ -910,23 +923,12 @@ void WorldScape3DAssetDock::init() {
 
 	update_dock();
 	update_layout();
-
-	// Setup styles
-	set("theme_override_styles/panel", get_theme_stylebox("panel", "Panel"));
-	// Avoid saving icon resources in tscn when editing w/ a tool script
-	auto scene_root = EditorInterface::get_singleton()->get_edited_scene_root();
-	if (scene_root != this) {
-		_pinned_btn->set_button_icon(get_theme_icon("Pin", "EditorIcons"));
-		_pinned_btn->set_text("");
-		_floating_btn->set_button_icon(get_theme_icon("MakeFloating", "EditorIcons"));
-		_floating_btn->set_text("");
-	}
 }
 
 WorldScape3DAssetDock::WorldScape3DAssetDock(WorldScape3DEditorPlugin *plugin) :
 		_plugin{ plugin } {
 	create_layout();
-	_rex_editor_last_state = _plugin->get_rex_editor_window()->get_mode();
+	_redot_editor_last_state = _plugin->get_redot_editor_window()->get_mode();
 
 	// FIXME: this would leak?
 	//_floating_btn->set_owner(nullptr);
@@ -947,25 +949,9 @@ WorldScape3DAssetDock::WorldScape3DAssetDock(WorldScape3DEditorPlugin *plugin) :
 
 	load_editor_settings();
 
+	set_visible(false);
+
 	_initialized = true;
-}
-
-WorldScape3DAssetDock::~WorldScape3DAssetDock() {
-	_mesh_list->clear();
-	_mesh_list->queue_free();
-	_texture_list->clear();
-	_texture_list->queue_free();
-
-	_placement_opt->queue_free();
-	_floating_btn->queue_free();
-	_pinned_btn->queue_free();
-	_size_slider->queue_free();
-	_box->queue_free();
-	_buttons->queue_free();
-	_textures_btn->queue_free();
-	_meshes_btn->queue_free();
-	_asset_container->queue_free();
-	_confirm_dialog->queue_free();
 }
 
 // Dock placement
@@ -990,6 +976,7 @@ void WorldScape3DAssetDock::remove_dock(const bool force) {
 			break;
 		case State::BOTTOM:
 			_plugin->remove_control_from_bottom_panel(this);
+			EditorNode::get_bottom_panel()->make_item_visible(EditorNode::get_log());
 			_state = State::HIDDEN;
 			break;
 		case State::WINDOWED: {
@@ -997,10 +984,10 @@ void WorldScape3DAssetDock::remove_dock(const bool force) {
 				if (auto parent = get_parent(); parent) {
 					parent->remove_child(this);
 				}
-				auto rex = _plugin->get_rex_editor_window();
-				rex->disconnect("mouse_entered", callable_mp(this, &WorldScape3DAssetDock::on_rex_window_entered));
-				rex->disconnect("focus_entered", callable_mp(this, &WorldScape3DAssetDock::on_rex_focus_entered));
-				rex->disconnect("focus_exited", callable_mp(this, &WorldScape3DAssetDock::on_rex_focus_exited));
+				auto redot = _plugin->get_redot_editor_window();
+				redot->disconnect("mouse_entered", callable_mp(this, &WorldScape3DAssetDock::on_redot_window_entered));
+				redot->disconnect("focus_entered", callable_mp(this, &WorldScape3DAssetDock::on_redot_focus_entered));
+				redot->disconnect("focus_exited", callable_mp(this, &WorldScape3DAssetDock::on_redot_focus_exited));
 				_window->hide();
 				_window->queue_free();
 				_window = nullptr;
@@ -1027,13 +1014,15 @@ void WorldScape3DAssetDock::update_dock() {
 
 	// Move dock to new destination
 	remove_dock();
-	if (_slot < POS_BOTTOM) { // Sidebar
-		_state = SIDEBAR;
-		_plugin->add_control_to_dock(static_cast<EditorPlugin::DockSlot>(_slot), this);
-	} else if (_slot == POS_BOTTOM) { // Bottom
-		_state = BOTTOM;
-		_plugin->add_control_to_bottom_panel(this, "Terrain Assets");
-		_plugin->make_bottom_panel_item_visible(this);
+	if (is_visible()) {
+		if (_slot < POS_BOTTOM) { // Sidebar
+			_state = SIDEBAR;
+			_plugin->add_control_to_dock(static_cast<EditorPlugin::DockSlot>(_slot), this);
+		} else if (_slot == POS_BOTTOM) { // Bottom
+			_state = BOTTOM;
+			_plugin->add_control_to_bottom_panel(this, "Terrain Assets");
+			_plugin->make_bottom_panel_item_visible(this);
+		}
 	}
 }
 
@@ -1209,10 +1198,10 @@ void WorldScape3DAssetDock::make_dock_float() {
 	_window->connect("focus_exited", callable_mp(this, &WorldScape3DAssetDock::save_editor_settings));
 	_window->connect("mouse_exited", callable_mp(this, &WorldScape3DAssetDock::save_editor_settings));
 	_window->connect("size_changed", callable_mp(this, &WorldScape3DAssetDock::save_editor_settings));
-	const auto editor_window = _plugin->get_rex_editor_window();
-	editor_window->connect("mouse_entered", callable_mp(this, &WorldScape3DAssetDock::on_rex_window_entered));
-	editor_window->connect("focus_entered", callable_mp(this, &WorldScape3DAssetDock::on_rex_focus_entered));
-	editor_window->connect("focus_exited", callable_mp(this, &WorldScape3DAssetDock::on_rex_focus_exited));
+	const auto editor_window = _plugin->get_redot_editor_window();
+	editor_window->connect("mouse_entered", callable_mp(this, &WorldScape3DAssetDock::on_redot_window_entered));
+	editor_window->connect("focus_entered", callable_mp(this, &WorldScape3DAssetDock::on_redot_focus_entered));
+	editor_window->connect("focus_exited", callable_mp(this, &WorldScape3DAssetDock::on_redot_focus_exited));
 	editor_window->grab_focus();
 	update_assets();
 	save_editor_settings();
@@ -1261,35 +1250,35 @@ void WorldScape3DAssetDock::on_window_input(Ref<InputEvent> event) {
 	}
 }
 
-void WorldScape3DAssetDock::on_rex_window_entered() {
+void WorldScape3DAssetDock::on_redot_window_entered() {
 	if (_window && _window->has_focus()) {
-		_plugin->get_rex_editor_window()->grab_focus();
+		_plugin->get_redot_editor_window()->grab_focus();
 	}
 }
 
-void WorldScape3DAssetDock::on_rex_focus_entered() {
-	// If asset dock is windowed, and ReX was minimized, and now is not, restore asset dock window
+void WorldScape3DAssetDock::on_redot_focus_entered() {
+	// If asset dock is windowed, and Redot was minimized, and now is not, restore asset dock window
 	if (_window) {
-		auto editor_window = _plugin->get_rex_editor_window();
-		if (_rex_editor_last_state == Window::MODE_MINIMIZED && editor_window->get_mode() != Window::MODE_MINIMIZED) {
+		auto editor_window = _plugin->get_redot_editor_window();
+		if (_redot_editor_last_state == Window::MODE_MINIMIZED && editor_window->get_mode() != Window::MODE_MINIMIZED) {
 			_window->show();
-			_rex_editor_last_state = editor_window->get_mode();
+			_redot_editor_last_state = editor_window->get_mode();
 			editor_window->grab_focus();
 		}
 	}
 }
 
-void WorldScape3DAssetDock::on_rex_focus_exited() {
-	if (auto editor_window = _plugin->get_rex_editor_window(); _window && editor_window->get_mode() == Window::MODE_MINIMIZED) {
+void WorldScape3DAssetDock::on_redot_focus_exited() {
+	if (auto editor_window = _plugin->get_redot_editor_window(); _window && editor_window->get_mode() == Window::MODE_MINIMIZED) {
 		_window->hide();
-		_rex_editor_last_state = editor_window->get_mode();
+		_redot_editor_last_state = editor_window->get_mode();
 	}
 }
 
 // Manage Editor Settings
 
 void WorldScape3DAssetDock::load_editor_settings() {
-	_floating_btn->set_pressed(_plugin->get_setting(ES_DOCK_FLOATING, false));
+	_floating_btn->set_pressed(false); // do not use _plugin->get_setting(ES_DOCK_FLOATING, false) for now
 	_pinned_btn->set_pressed(_plugin->get_setting(ES_DOCK_PINNED, true));
 	_size_slider->set_value(_plugin->get_setting(ES_DOCK_TILE_SIZE, 90.f));
 	on_slider_changed(_size_slider->get_value());
@@ -1310,7 +1299,8 @@ void WorldScape3DAssetDock::save_editor_settings() {
 	clamp_window_position();
 	_plugin->set_setting(ES_DOCK_SLOT, _slot);
 	_plugin->set_setting(ES_DOCK_TILE_SIZE, _size_slider->get_value());
-	_plugin->set_setting(ES_DOCK_FLOATING, _floating_btn->is_pressed());
+	// TODO For now, never start with a floating dock - this ensures predictable behavior
+	_plugin->set_setting(ES_DOCK_FLOATING, false /*_floating_btn->is_pressed()*/);
 	_plugin->set_setting(ES_DOCK_PINNED, _pinned_btn->is_pressed());
 	// TODO Don't save tab until thumbnail generation is more reliable
 	//_plugin->set_setting(ES_DOCK_TAB, _current_list == _texture_list ? 0 : 1);
@@ -1327,8 +1317,8 @@ void WorldScape3DAssetDock::_bind_methods() {
 }
 
 void WorldScape3DAssetDock::_notification(int what) {
-	if (what == NOTIFICATION_POSTINITIALIZE) {
-		init();
+	if (what == Node::NOTIFICATION_POST_ENTER_TREE) {
+		setup_theme();
 	}
 }
 

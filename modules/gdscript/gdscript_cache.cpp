@@ -43,6 +43,7 @@
 #include "gdscript_compiler.h"
 #include "gdscript_parser.h"
 
+#include "core/config/engine.h"
 #include "core/io/file_access.h"
 #include "core/templates/vector.h"
 
@@ -279,6 +280,16 @@ void GDScriptCache::remove_parser(const String &p_path) {
 }
 
 String GDScriptCache::get_source_code(const String &p_path) {
+	// The editor may have a newer, unsaved version of a trait in memory.
+#ifdef TOOLS_ENABLED
+	if (Engine::get_singleton()->is_editor_hint()) {
+		Ref<GDScript> script = ResourceCache::get_ref(p_path);
+		if (script.is_valid() && script->file_trait) {
+			return script->get_source_code();
+		}
+	}
+#endif
+
 	Vector<uint8_t> source_file;
 	Error err;
 	Ref<FileAccess> f = FileAccess::open(p_path, FileAccess::READ, &err);
@@ -492,7 +503,7 @@ void GDScriptCache::clear() {
 
 	singleton->parser_map.clear();
 
-	for (Ref<GDScriptParserRef> &E : parser_map_refs) {
+	for (const Ref<GDScriptParserRef> &E : parser_map_refs) {
 		if (E.is_valid()) {
 			E->clear();
 		}

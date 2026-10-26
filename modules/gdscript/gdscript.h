@@ -92,6 +92,7 @@ class GDScript : public Script {
 	friend class GDScriptInstance;
 	friend class GDScriptFunction;
 	friend class GDScriptAnalyzer;
+	friend class GDScriptCache;
 	friend class GDScriptCompiler;
 	friend class GDScriptDocGen;
 	friend class GDScriptLambdaCallable;
@@ -161,6 +162,20 @@ private:
 	HashMap<StringName, Variant> member_default_values;
 	List<PropertyInfo> members_cache;
 	HashMap<StringName, Variant> member_default_values_cache;
+	HashMap<StringName, Variant> member_array_element_defaults_cache;
+	struct ExportObjectType {
+		StringName native_type;
+		StringName script_type;
+		bool is_trait = false;
+	};
+	HashMap<StringName, ExportObjectType> member_object_types_cache;
+	struct ExportStructType {
+		Ref<StructInfo> info;
+		bool is_nullable = false;
+	};
+	HashMap<StringName, ExportStructType> member_struct_types_cache;
+	/// Retains type dependencies after parser invalidation during reload.
+	HashSet<String> export_dependencies_cache;
 	Ref<GDScript> base_cache;
 	HashSet<ObjectID> inheriters_cache;
 	bool source_changed_cache = false;
@@ -197,6 +212,7 @@ private:
 	String fully_qualified_name;
 	String simplified_icon_path;
 	Vector<StringName> traits_fqtn; // Fully-qualified trait names used by script.
+	bool file_trait = false; ///< Whether this script defines a file-level trait.
 	SelfList<GDScript> script_list;
 
 	SelfList<GDScriptFunctionState>::List pending_func_states;
@@ -211,6 +227,7 @@ private:
 	HashSet<PlaceHolderScriptInstance *> placeholders;
 	//void _update_placeholder(PlaceHolderScriptInstance *p_placeholder);
 	virtual void _placeholder_erased(PlaceHolderScriptInstance *p_placeholder) override;
+	virtual bool _placeholder_value_is_valid(const StringName &p_name, const Variant &p_value) const override;
 	void _update_exports_down(bool p_base_exports_changed);
 #endif
 
@@ -250,7 +267,8 @@ public:
 	}
 
 	_FORCE_INLINE_ StringName get_local_name() const { return local_name; }
-	_FORCE_INLINE_ bool has_trait(const StringName &p_trait) const { return traits_fqtn.has(p_trait); }
+	_FORCE_INLINE_ bool has_trait(const StringName &p_trait) const override { return traits_fqtn.has(p_trait); }
+	_FORCE_INLINE_ bool is_trait() const override { return file_trait; }
 
 	void clear(GDScript::ClearData *p_clear_data = nullptr);
 
@@ -266,6 +284,7 @@ public:
 	GDScript *get_root_script();
 	bool is_root_script() const { return _owner == nullptr; }
 	String get_fully_qualified_name() const { return fully_qualified_name; }
+	StringName get_qualified_class_name() const override { return fully_qualified_name; }
 	const HashMap<StringName, Ref<GDScript>> &get_subclasses() const { return subclasses; }
 	const HashMap<StringName, Variant> &get_constants() const { return constants; }
 	const HashSet<StringName> &get_members() const { return members; }
@@ -331,6 +350,7 @@ public:
 	Vector<uint8_t> get_as_binary_tokens() const;
 
 	bool get_property_default_value(const StringName &p_property, Variant &r_value) const override;
+	bool get_property_array_element_default_value(const StringName &p_property, Variant &r_value) const override;
 
 	virtual void get_script_method_list(List<MethodInfo> *p_list) const override;
 	virtual bool has_method(const StringName &p_method) const override;

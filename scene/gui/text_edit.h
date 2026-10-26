@@ -301,6 +301,7 @@ private:
 	/// @name Text
 	/// @{
 	Text text;
+	RID text_ci;
 	bool setting_text = false;
 
 	enum AltInputMode {
@@ -645,7 +646,6 @@ private:
 	HashMap<int, Vector<Pair<int64_t, Color>>> syntax_highlighting_cache;
 
 	Vector<Pair<int64_t, Color>> _get_line_syntax_highlighting(int p_line);
-	void _clear_syntax_highlighting_cache();
 	/// @}
 
 	/* Visual. */
@@ -704,6 +704,9 @@ private:
 	bool draw_spaces = false;
 
 	RID accessibility_text_root_element_nl;
+
+	// FIXME: Helper method to draw unfilled rects, should be moved to RenderingServer.
+	void _draw_rect_unfilled(RID p_canvas_item, const Rect2 &p_rect, const Color &p_color, real_t p_width = -1.0, bool p_antialiased = false) const;
 
 	/*** Super internal Core API. Everything builds on it. ***/
 	bool text_changed_dirty = false;
@@ -843,6 +846,8 @@ public:
 
 	/// @name Text Properties
 	/// @{
+	RID get_text_canvas_item() const;
+
 	bool has_ime_text() const;
 	void cancel_ime();
 	void apply_ime();
@@ -1235,6 +1240,7 @@ public:
 	/// @{
 	void set_syntax_highlighter(Ref<SyntaxHighlighter> p_syntax_highlighter);
 	Ref<SyntaxHighlighter> get_syntax_highlighter() const;
+	void clear_syntax_highlighting_cache();
 	/// @}
 	/// @name Visual
 	/// @{
@@ -1284,6 +1290,7 @@ public:
 #endif
 
 	TextEdit(const String &p_placeholder = String());
+	~TextEdit();
 };
 
 VARIANT_ENUM_CAST(TextEdit::EditAction);

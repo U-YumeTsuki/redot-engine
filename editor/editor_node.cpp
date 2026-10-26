@@ -3502,7 +3502,7 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			OS::get_singleton()->shell_open("https://github.com/Redot-Engine/redot-proposals#readme");
 		} break;
 		case HELP_SEND_DOCS_FEEDBACK: {
-			OS::get_singleton()->shell_open("https://github.com/Redot-Engine/redot-docs/issues");
+			OS::get_singleton()->shell_open("https://github.com/Redot-Engine/Redot-Documentation/issues");
 		} break;
 		case HELP_COMMUNITY: {
 			OS::get_singleton()->shell_open("https://redotengine.org/community");
@@ -5350,6 +5350,9 @@ bool EditorNode::is_object_of_custom_type(const Object *p_object, const StringNa
 	}
 
 	if (scr.is_valid()) {
+		if (scr->has_trait(p_class)) {
+			return true;
+		}
 		Ref<Script> base_script = scr;
 		while (base_script.is_valid()) {
 			StringName name = EditorNode::get_editor_data().script_class_get_name(base_script->get_path());
